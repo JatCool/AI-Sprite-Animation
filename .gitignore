@@ -1,0 +1,9 @@
+*.log
+.vs/
+.idea/
+# Large AI models must never be committed: they live in the local ComfyUI install.
+*.safetensors
+*.ckpt
+*.pth
+*.pt
+*.bin

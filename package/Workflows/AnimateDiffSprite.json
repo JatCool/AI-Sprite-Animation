@@ -1,0 +1,942 @@
+{
+ "1": {
+  "class_type": "CheckpointLoaderSimple",
+  "inputs": {
+   "ckpt_name": "__CHECKPOINT__"
+  },
+  "_meta": {
+   "title": "Checkpoint"
+  }
+ },
+ "2": {
+  "class_type": "CLIPTextEncode",
+  "inputs": {
+   "text": "__PROMPT__",
+   "clip": [
+    "1",
+    1
+   ]
+  },
+  "_meta": {
+   "title": "Positive prompt"
+  }
+ },
+ "3": {
+  "class_type": "CLIPTextEncode",
+  "inputs": {
+   "text": "__NEGATIVE_PROMPT__",
+   "clip": [
+    "1",
+    1
+   ]
+  },
+  "_meta": {
+   "title": "Negative prompt"
+  }
+ },
+ "4": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__INPUT_IMAGE__"
+  },
+  "_meta": {
+   "title": "Source sprite (reference)"
+  }
+ },
+ "5": {
+  "class_type": "ImageScale",
+  "inputs": {
+   "image": [
+    "4",
+    0
+   ],
+   "upscale_method": "nearest-exact",
+   "width": "__WIDTH__",
+   "height": "__HEIGHT__",
+   "crop": "disabled"
+  },
+  "_meta": {
+   "title": "Scale source to working size"
+  }
+ },
+ "6": {
+  "class_type": "VAEEncode",
+  "inputs": {
+   "pixels": [
+    "5",
+    0
+   ],
+   "vae": [
+    "1",
+    2
+   ]
+  },
+  "_meta": {
+   "title": "Encode source"
+  }
+ },
+ "7": {
+  "class_type": "RepeatLatentBatch",
+  "inputs": {
+   "samples": [
+    "6",
+    0
+   ],
+   "amount": "__FRAME_COUNT__"
+  },
+  "_meta": {
+   "title": "Repeat latent x frames"
+  }
+ },
+ "8": {
+  "class_type": "ADE_LoadAnimateDiffModel",
+  "inputs": {
+   "model_name": "__MOTION_MODEL__"
+  },
+  "_meta": {
+   "title": "AnimateDiff motion model"
+  }
+ },
+ "9": {
+  "class_type": "ADE_MultivalDynamic",
+  "inputs": {
+   "float_val": "__MOTION_SCALE__"
+  },
+  "_meta": {
+   "title": "Motion scale"
+  }
+ },
+ "10": {
+  "class_type": "ADE_ApplyAnimateDiffModel",
+  "inputs": {
+   "motion_model": [
+    "8",
+    0
+   ],
+   "start_percent": 0.0,
+   "end_percent": 1.0,
+   "scale_multival": [
+    "9",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Apply motion model"
+  }
+ },
+ "11": {
+  "class_type": "IPAdapterUnifiedLoader",
+  "inputs": {
+   "model": [
+    "1",
+    0
+   ],
+   "preset": "__IPADAPTER_PRESET__"
+  },
+  "_meta": {
+   "title": "IPAdapter loader"
+  }
+ },
+ "12": {
+  "class_type": "IPAdapter",
+  "inputs": {
+   "model": [
+    "11",
+    0
+   ],
+   "ipadapter": [
+    "11",
+    1
+   ],
+   "image": [
+    "40",
+    0
+   ],
+   "weight": "__IPADAPTER_WEIGHT__",
+   "start_at": 0.0,
+   "end_at": 1.0,
+   "weight_type": "standard"
+  },
+  "_meta": {
+   "title": "IPAdapter (reference conditioning)"
+  }
+ },
+ "13": {
+  "class_type": "ADE_UseEvolvedSampling",
+  "inputs": {
+   "model": [
+    "12",
+    0
+   ],
+   "beta_schedule": "autoselect",
+   "m_models": [
+    "10",
+    0
+   ],
+   "sample_settings": [
+    "46",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "AnimateDiff sampling"
+  }
+ },
+ "14": {
+  "class_type": "ControlNetLoader",
+  "inputs": {
+   "control_net_name": "__TILE_CONTROLNET_MODEL__"
+  },
+  "_meta": {
+   "title": "Tile ControlNet loader"
+  }
+ },
+ "15": {
+  "class_type": "ControlNetApplyAdvanced",
+  "inputs": {
+   "positive": [
+    "21",
+    0
+   ],
+   "negative": [
+    "21",
+    1
+   ],
+   "control_net": [
+    "14",
+    0
+   ],
+   "image": [
+    "5",
+    0
+   ],
+   "strength": "__TILE_STRENGTH__",
+   "start_percent": 0.0,
+   "end_percent": "__TILE_END__",
+   "vae": [
+    "1",
+    2
+   ]
+  },
+  "_meta": {
+   "title": "Tile ControlNet (anchor sprite)"
+  }
+ },
+ "16": {
+  "class_type": "KSampler",
+  "inputs": {
+   "model": [
+    "13",
+    0
+   ],
+   "seed": "__SEED__",
+   "steps": "__STEPS__",
+   "cfg": "__CFG__",
+   "sampler_name": "euler_ancestral",
+   "scheduler": "normal",
+   "positive": [
+    "15",
+    0
+   ],
+   "negative": [
+    "15",
+    1
+   ],
+   "latent_image": [
+    "7",
+    0
+   ],
+   "denoise": "__DENOISE__"
+  },
+  "_meta": {
+   "title": "KSampler"
+  }
+ },
+ "17": {
+  "class_type": "VAEDecode",
+  "inputs": {
+   "samples": [
+    "16",
+    0
+   ],
+   "vae": [
+    "1",
+    2
+   ]
+  },
+  "_meta": {
+   "title": "VAE decode"
+  }
+ },
+ "18": {
+  "class_type": "PreviewImage",
+  "inputs": {
+   "images": [
+    "17",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Output frames (preview)"
+  }
+ },
+ "20": {
+  "class_type": "ControlNetLoader",
+  "inputs": {
+   "control_net_name": "__POSE_CONTROLNET_MODEL__"
+  },
+  "_meta": {
+   "title": "OpenPose ControlNet loader"
+  }
+ },
+ "21": {
+  "class_type": "ControlNetApplyAdvanced",
+  "inputs": {
+   "positive": [
+    "2",
+    0
+   ],
+   "negative": [
+    "3",
+    0
+   ],
+   "control_net": [
+    "20",
+    0
+   ],
+   "image": [
+    "45",
+    0
+   ],
+   "strength": "__POSE_STRENGTH__",
+   "start_percent": 0.0,
+   "end_percent": 1.0,
+   "vae": [
+    "1",
+    2
+   ]
+  },
+  "_meta": {
+   "title": "OpenPose ControlNet (pose sequence)"
+  }
+ },
+ "40": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__REFERENCE_IMAGE__"
+  },
+  "_meta": {
+   "title": "Character reference (tight crop)"
+  }
+ },
+ "45": {
+  "class_type": "ImageFromBatch",
+  "inputs": {
+   "image": [
+    "223",
+    0
+   ],
+   "batch_index": 0,
+   "length": "__FRAME_COUNT__"
+  },
+  "_meta": {
+   "title": "Use only the first N poses"
+  }
+ },
+ "46": {
+  "class_type": "ADE_AnimateDiffSamplingSettings",
+  "inputs": {
+   "batch_offset": 0,
+   "noise_type": "__NOISE_TYPE__",
+   "seed_gen": "comfy",
+   "seed_offset": 0
+  },
+  "_meta": {
+   "title": "Noise consistency"
+  }
+ },
+ "100": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_00__"
+  },
+  "_meta": {
+   "title": "Pose 0"
+  }
+ },
+ "101": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_01__"
+  },
+  "_meta": {
+   "title": "Pose 1"
+  }
+ },
+ "102": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_02__"
+  },
+  "_meta": {
+   "title": "Pose 2"
+  }
+ },
+ "103": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_03__"
+  },
+  "_meta": {
+   "title": "Pose 3"
+  }
+ },
+ "104": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_04__"
+  },
+  "_meta": {
+   "title": "Pose 4"
+  }
+ },
+ "105": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_05__"
+  },
+  "_meta": {
+   "title": "Pose 5"
+  }
+ },
+ "106": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_06__"
+  },
+  "_meta": {
+   "title": "Pose 6"
+  }
+ },
+ "107": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_07__"
+  },
+  "_meta": {
+   "title": "Pose 7"
+  }
+ },
+ "108": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_08__"
+  },
+  "_meta": {
+   "title": "Pose 8"
+  }
+ },
+ "109": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_09__"
+  },
+  "_meta": {
+   "title": "Pose 9"
+  }
+ },
+ "110": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_10__"
+  },
+  "_meta": {
+   "title": "Pose 10"
+  }
+ },
+ "111": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_11__"
+  },
+  "_meta": {
+   "title": "Pose 11"
+  }
+ },
+ "112": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_12__"
+  },
+  "_meta": {
+   "title": "Pose 12"
+  }
+ },
+ "113": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_13__"
+  },
+  "_meta": {
+   "title": "Pose 13"
+  }
+ },
+ "114": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_14__"
+  },
+  "_meta": {
+   "title": "Pose 14"
+  }
+ },
+ "115": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_15__"
+  },
+  "_meta": {
+   "title": "Pose 15"
+  }
+ },
+ "116": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_16__"
+  },
+  "_meta": {
+   "title": "Pose 16"
+  }
+ },
+ "117": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_17__"
+  },
+  "_meta": {
+   "title": "Pose 17"
+  }
+ },
+ "118": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_18__"
+  },
+  "_meta": {
+   "title": "Pose 18"
+  }
+ },
+ "119": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_19__"
+  },
+  "_meta": {
+   "title": "Pose 19"
+  }
+ },
+ "120": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_20__"
+  },
+  "_meta": {
+   "title": "Pose 20"
+  }
+ },
+ "121": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_21__"
+  },
+  "_meta": {
+   "title": "Pose 21"
+  }
+ },
+ "122": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_22__"
+  },
+  "_meta": {
+   "title": "Pose 22"
+  }
+ },
+ "123": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "__POSE_23__"
+  },
+  "_meta": {
+   "title": "Pose 23"
+  }
+ },
+ "201": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "100",
+    0
+   ],
+   "image2": [
+    "101",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 1"
+  }
+ },
+ "202": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "201",
+    0
+   ],
+   "image2": [
+    "102",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 2"
+  }
+ },
+ "203": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "202",
+    0
+   ],
+   "image2": [
+    "103",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 3"
+  }
+ },
+ "204": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "203",
+    0
+   ],
+   "image2": [
+    "104",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 4"
+  }
+ },
+ "205": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "204",
+    0
+   ],
+   "image2": [
+    "105",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 5"
+  }
+ },
+ "206": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "205",
+    0
+   ],
+   "image2": [
+    "106",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 6"
+  }
+ },
+ "207": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "206",
+    0
+   ],
+   "image2": [
+    "107",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 7"
+  }
+ },
+ "208": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "207",
+    0
+   ],
+   "image2": [
+    "108",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 8"
+  }
+ },
+ "209": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "208",
+    0
+   ],
+   "image2": [
+    "109",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 9"
+  }
+ },
+ "210": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "209",
+    0
+   ],
+   "image2": [
+    "110",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 10"
+  }
+ },
+ "211": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "210",
+    0
+   ],
+   "image2": [
+    "111",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 11"
+  }
+ },
+ "212": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "211",
+    0
+   ],
+   "image2": [
+    "112",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 12"
+  }
+ },
+ "213": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "212",
+    0
+   ],
+   "image2": [
+    "113",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 13"
+  }
+ },
+ "214": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "213",
+    0
+   ],
+   "image2": [
+    "114",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 14"
+  }
+ },
+ "215": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "214",
+    0
+   ],
+   "image2": [
+    "115",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 15"
+  }
+ },
+ "216": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "215",
+    0
+   ],
+   "image2": [
+    "116",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 16"
+  }
+ },
+ "217": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "216",
+    0
+   ],
+   "image2": [
+    "117",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 17"
+  }
+ },
+ "218": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "217",
+    0
+   ],
+   "image2": [
+    "118",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 18"
+  }
+ },
+ "219": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "218",
+    0
+   ],
+   "image2": [
+    "119",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 19"
+  }
+ },
+ "220": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "219",
+    0
+   ],
+   "image2": [
+    "120",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 20"
+  }
+ },
+ "221": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "220",
+    0
+   ],
+   "image2": [
+    "121",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 21"
+  }
+ },
+ "222": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "221",
+    0
+   ],
+   "image2": [
+    "122",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 22"
+  }
+ },
+ "223": {
+  "class_type": "ImageBatch",
+  "inputs": {
+   "image1": [
+    "222",
+    0
+   ],
+   "image2": [
+    "123",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "Pose batch 23"
+  }
+ }
+}

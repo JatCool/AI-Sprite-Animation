@@ -1,0 +1,22 @@
+{
+  "name": "com.limpo.ai-sprite-animation",
+  "displayName": "AI Sprite Animation",
+  "version": "1.0.0",
+  "unity": "6000.6",
+  "unityRelease": "0f1",
+  "description": "Generate 2D sprite animations locally with ComfyUI (AnimateDiff + IPAdapter + OpenPose/Tile ControlNet) from inside the Unity editor. Starts and stops ComfyUI automatically, post-processes the frames into palette-exact pixel art, imports them as sprites and builds an AnimationClip.",
+  "keywords": [
+    "2d",
+    "sprite",
+    "animation",
+    "ai",
+    "comfyui",
+    "animatediff",
+    "pixel-art",
+    "editor-tool"
+  ],
+  "author": {
+    "name": "limpo"
+  },
+  "license": "MIT"
+}
