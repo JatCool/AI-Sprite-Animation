@@ -1,10 +1,10 @@
 {
   "name": "com.limpo.ai-sprite-animation",
   "displayName": "AI Sprite Animation",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "unity": "6000.6",
   "unityRelease": "0f1",
-  "description": "Generate 2D sprite animations locally with ComfyUI (AnimateDiff + IPAdapter + OpenPose/Tile ControlNet) from inside the Unity editor. Starts and stops ComfyUI automatically, post-processes the frames into palette-exact pixel art, imports them as sprites and builds an AnimationClip.",
+  "description": "Animate a 2D sprite from a single image inside the Unity editor. Default Rig method moves the sprite's own pixels through a bone hierarchy (independent arms, legs, weapon; pixel-exact, instant). Optional experimental AI Redraw uses a local ComfyUI (AnimateDiff). Imports frames as sprites and builds an AnimationClip.",
   "keywords": [
     "2d",
     "sprite",

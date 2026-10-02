@@ -25,7 +25,7 @@ the comparison is pixel-exact in the regions that should not move:
 | F. C + context windows (8/overlap 4) | failed | | | | | |
 | G. F + ContextRef | failed | | | | | |
 
-\* Rig head/consistency values are lower only because the head genuinely bobs and the body leans while walking; the rig never changes a pixel's colour.
+\* Measured with the first, simpler rig (head/body/legs). The current hierarchical rig (independent arms, hair, weapon, feet) moves more of the sprite on purpose, so the exact-position match is lower by design; what matters is that every pixel is still an original pixel (palette match 100%, colour-histogram match about 0.9).
 
 Findings
 

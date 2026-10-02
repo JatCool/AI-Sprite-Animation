@@ -23,6 +23,12 @@ namespace AISpriteAnimation
         [MenuItem("Tools/AI Sprite Animation/Generate Animation")]
         private static void OpenWindow() => AIAnimationWindow.Open();
 
+        [MenuItem("Assets/AI/Sprite Rig Editor", false, 2010)]
+        private static void OpenRigEditorFromAssets() => SpriteRigEditorWindow.Open(Selection.activeObject);
+
+        [MenuItem("Assets/AI/Sprite Rig Editor", true)]
+        private static bool ValidateRigEditor() => SourceSprite.IsValidSelection(Selection.activeObject);
+
         [MenuItem("Tools/AI Sprite Animation/Select Settings Asset")]
         private static void SelectSettings()
         {

@@ -129,6 +129,7 @@ namespace AISpriteAnimation
                 Fps = 8,
                 Loop = true,
                 Seed = 1,
+                AutoCreateRig = true,
                 SettingsOverride = settings,
             }, progress, ct);
 

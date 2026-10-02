@@ -4,19 +4,19 @@ Generate 2D sprite animations from a single sprite, inside the Unity editor.
 Select a sprite, choose *Idle / Walk / Run / Attack*, and get imported frames and an `AnimationClip`
 that look like **the same character** moving, in hard-edged pixel art, with the sprite's own transparency.
 
-Two modes:
+Two animation methods:
 
-| Mode | How frames are made | Identity | Needs ComfyUI | Time (RTX 3080) |
+| Method | How frames are made | Identity | Needs ComfyUI | Time (RTX 3080) |
 |---|---|---|---|---|
-| **Rig** (default) | The sprite's own pixels are cut into parts (head, body, two legs, optional weapon arm) and moved by a procedural skeleton | **Pixel-exact**: same palette, details, face, weapon | No | about 1 s |
-| **AIRedraw** | [ComfyUI](https://github.com/Comfy-Org/ComfyUI) + AnimateDiff + IPAdapter + OpenPose ControlNet redraw every frame | Approximate (silhouette yes, pixel detail no) | Yes (started and stopped automatically) | about 90-120 s |
+| **Rig (Recommended for Pixel Art)** - default | The sprite's own pixels are assigned to parts (head, hair, body, both arms, both legs, weapon) and moved through a bone hierarchy | **Pixel-exact**: same palette, details, face, weapon | No | about 1 s |
+| **AI Redraw (Experimental)** | [ComfyUI](https://github.com/Comfy-Org/ComfyUI) + AnimateDiff + IPAdapter + OpenPose ControlNet redraw every frame | Approximate (silhouette yes, pixel detail no): slower, GPU-dependent, may alter face and clothing; for stylised sprites | Yes (started and stopped automatically) | about 90-120 s |
 
 Why Rig is the default: `Documentation~/benchmarks.md` benchmarks AnimateDiff (IPAdapter strengths, FreeNoise, FreeInit, context windows) against the rig on
-the same sprite and seed. No diffusion variant kept a 48x48 character's pixels (torso match 0.10-0.29 vs 0.98 for the rig).
+the same sprite and seed. No diffusion variant kept a 48x48 character's pixels (torso pixel match 0.10-0.29); the rig only moves original pixels, so palette and details are identical by construction.
 The skeleton, not a text prompt, controls the movement in both modes.
 
 ```
-Rig:       sprite -> segment parts -> skeleton moves parts -> majority-vote downsample -> crop + pivot -> sprites -> AnimationClip
+Rig:       sprite + rig asset -> bone hierarchy moves the parts -> grounding -> majority-vote downsample -> crop + pivot -> sprites -> AnimationClip
 AIRedraw:  sprite -> padded canvas + reference + pose images -> ComfyUI (AnimateDiff) -> frames -> palette snap + source silhouette mask -> same tail
 ```
 
@@ -73,19 +73,59 @@ Assets/AIAnimations/<Sprite>/<Animation>/
 **Animator Controller** (optional): the clip goes into a state named after the animation (`Walk`). If a state of that name already holds *your own* motion, a separate
 `Walk (AI)` state is used; only an empty state or one that already holds a generated clip is updated. Transitions are never touched.
 
-## 3. Rig mode
+## 3. Rig mode (Recommended for Pixel Art)
 
-Every pixel of the source sprite is assigned to a body part from where it lies relative to the character's body box:
+Rig mode never redraws anything. A **rig** says which pixels of your sprite are the head, hair, body, each arm, each leg and the weapon, and where the
+joints are. Animations then move those parts through a bone hierarchy. Every output pixel is an original pixel; transparency is the sprite's own alpha.
 
-* above the **neck line** -> head; below the **hip line** -> legs (two full copies of the leg band, rotated apart, near leg drawn over the far leg);
-  between -> body (torso, arms and weapon move together, which keeps a held weapon steady);
-* attacks (`rigMoveArm`): the part sticking out in front of the body (blade, hand) pivots at its base.
+**Workflow:** select a sprite > *Generate Animation* > *Walk*. If the sprite has a rig (`<Sprite>_Rig.asset`, by default next to the sprite) it is used.
+If not, you are asked to **open the Sprite Rig Editor** (recommended) or **auto-create** a starting rig (and refine it later). The rig is made once per character
+and reused by every animation. AI Redraw can still be chosen manually.
 
-The skeleton moves these parts (walk cycle, run cycle, breathing idle, attack swing) with the feet kept on the ground line.
-Tune per project in the settings asset: *Rig Neck Line*, *Rig Hip Line* (e.g. a chibi sprite with a big head needs a lower neck line), *Body/Leg Half Width*,
-*Arm Gain*; per preset: *Rig Swing* (leg/arm angle scale) and *Rig Move Arm*.
-Best for side-view humanoid-like sprites. Sprites that are not humanoid, or whose limbs are separate from the body in ways the heuristics cannot see,
-may need the neck/hip lines tuned, or AIRedraw.
+### Parts and hierarchy
+
+```
+Root (translation only: grounding, lunges, hops)
+ |- Body (pivot: hip)
+ |    |- Head (neck) --- Hair (hair pivot: ponytail swings with lag)
+ |    |- Right arm upper (shoulder) -- lower arm + hand (elbow) -- Weapon (weapon pivot)
+ |    '- Left arm upper (shoulder) -- lower arm + hand (elbow)
+ |- Right leg upper (hip) -- lower (knee) -- foot (ankle)
+ '- Left leg upper (hip)  -- lower (knee) -- foot (ankle)
+```
+
+Rotating an upper arm carries the forearm, hand and weapon with it (forward kinematics). "Right/near" parts are drawn in front, "left/far" parts behind.
+Overlapping legs (the usual side-view case) are supported: a pixel may belong to both legs.
+
+### The Sprite Rig Editor
+
+*Tools > AI Sprite Animation > Sprite Rig Editor* (or right-click a sprite > *AI > Sprite Rig Editor*).
+
+* **Joints tool**: drag the dots (neck, hair pivot, hip, both shoulders/elbows/hands, both knees/feet, weapon pivot and tip) and the yellow **ground line**.
+* **Paint parts / Fill region**: choose a part on the right, then paint pixels with a brush (*Add* keeps overlapping legs in both parts) or fill a connected region.
+* **Auto-assign parts** re-derives all parts from the current joints (overwrites painting); **Reset rig** rebuilds everything from the sprite's shape.
+* The **preview** plays any preset live with the real renderer, so you see the effect of every change. Undo/redo works.
+
+### Animations
+
+Idle, Walk, Run and Attack are procedural pose sequences (rotations per part plus root movement):
+
+* **Walk / Run**: alternating legs with knee flex, counter-swinging arms with elbow bend, forward lean, hair lag; the weapon partly cancels arm swing so a held sword stays steady. Run has a flight phase (intentional hop).
+* **Attack**: anticipation (lean back, weapon raised) -> swing -> follow-through -> recovery, with a step forward. One-shot; both endpoints are sampled.
+* **Idle**: breathing, weight shift, hair and weapon settle.
+* Presets scale all rotations with *Rig Intensity*. Frame count is free (2-24); loops sample exactly one cycle.
+
+**Grounding:** every frame the lowest foot pixel is placed on the rig's ground line, so feet never drift; the body height follows from the legs (and `hop` for runs/jumps).
+Only intentional vertical movement (`hop`) leaves the ground line. Translations are snapped to whole pixels.
+
+**Pixel art:** parts are composed at 4x and reduced by majority vote per pixel, so the output contains only colours that exist in the source, with hard edges, no blending
+and no anti-aliasing. Where an arm swings away from the torso, the vacated spot is filled with the surrounding body colour. Frames are cropped to the union of all used pixels
+with the source pivot mapped identically into every frame.
+
+### Extending: AI Pose + Rig (future)
+
+Poses come through `IRigPoseProvider` (`RigPose[] GetPoses(animation, frameCount, cycle, intensity)`); the procedural provider is one implementation. A future mode can implement the interface
+with poses estimated from an AI generation (e.g. AnimateDiff + OpenPose output): the rig renderer applies them to the original pixels unchanged.
 
 ## 4. AIRedraw mode: ComfyUI setup
 
@@ -142,19 +182,19 @@ Project-specific (`AIAnimationSettings` asset, commit it):
 
 | Setting | Meaning |
 |---|---|
-| Mode | Rig (default) or AIRedraw |
-| Rig Neck/Hip Line, Body/Leg Half Width, Arm Gain | how the sprite is cut into parts (Rig) |
+| Mode (*Animation Method* in the window) | Rig (Recommended for Pixel Art, default) or AI Redraw (Experimental) |
+| Rig Asset Folder, Rig Neck/Hip Line, Leg Half Width, Arm Radius, Duplicate Legs | only used when a rig is auto-created; the rig itself (joints, parts, ground line) lives in `<Sprite>_Rig.asset` |
 | Padding Percent (50), Crop To Used Bounds, Crop Margin | working-canvas padding and final framing |
 | Facing | which way the sprite faces (Left mirrors everything; verified to be an exact mirror) |
 | Output Root | where animations are written (default `Assets/AIAnimations`) |
 | Sprite Binding Path | hierarchy path of the SpriteRenderer for the clip (empty = same object as the Animator) |
 | Copy Import Settings From Source | on: PPU, filter, compression, pivot from the source sprite. off: *Pixels Per Unit* / *Filter Mode* below |
 | Workflow, model names, Generation Size (768), Tail Buffer Frames (4), Noise Type, Key Tolerance, Snap To Source Palette, Speckle/Fringe cleanup, Mask Radius | AIRedraw |
-| Presets | per animation: frames, fps, loop, pose kind, rig swing/arm, and the AIRedraw sampler weights |
+| Presets | per animation: frames, fps, loop, pose kind, *Rig Intensity*, and the AI Redraw sampler weights |
 
 Example for a 16 PPU pixel-art game: *Copy Import Settings From Source* off, *Pixels Per Unit* 16, *Filter Mode* Point, *Output Root* `Assets/Art/Generated`.
 
-Add a preset: select the settings asset > *Presets* > `+` (name, frames, fps, loop, pose kind `idle|walk|run|attack|none`, rig swing). It appears in the window's *Animation Type* list.
+Add a preset: select the settings asset > *Presets* > `+` (name, frames, fps, loop, pose kind `idle|walk|run|attack|none`, rig intensity). It appears in the window's *Animation Type* list.
 The right-click menu has fixed entries for the four defaults.
 
 Workflow placeholders (all defined in `ComfyWorkflowBuilder`; no node IDs are hardcoded in C#): `__INPUT_IMAGE__ __REFERENCE_IMAGE__ __PROMPT__ __NEGATIVE_PROMPT__ __FRAME_COUNT__ __WIDTH__ __HEIGHT__ __FPS__ __SEED__ __STEPS__ __CFG__ __DENOISE__ __MOTION_SCALE__ __NOISE_TYPE__ __IPADAPTER_WEIGHT__ __IPADAPTER_PRESET__ __TILE_STRENGTH__ __TILE_END__ __TILE_CONTROLNET_MODEL__ __POSE_STRENGTH__ __POSE_CONTROLNET_MODEL__ __CHECKPOINT__ __MOTION_MODEL__ __OUTPUT_PREFIX__ __POSE_00__ ... __POSE_23__`.
@@ -177,12 +217,12 @@ Unity.exe -batchmode -nographics -projectPath <project> -executeMethod AISpriteA
 ```
 
 Other arguments: `-aiComfyDir`, `-aiComfyUrl`, `-aiSeed`, `-aiController`, `-aiTimeout <s>`, `-aiCancelAfter <s>`, `-aiDiagnostics live|offline`, `-aiSelfTest 1`,
-`-aiOverride "mode=ai,denoise=0.8,..."`, `-aiWorkflow <file>`. Exit code 0 = success, 1 = failure, 2 = cancelled.
+`-aiOverride "mode=ai,denoise=0.8,..."`, `-aiWorkflow <file>`, `-aiRigJoints <file> [-aiRigOnly 1]` (build/refresh a sprite's rig from a joints file with lines like `Neck 26 18.5` and `ground 47`). In batch mode a missing rig is created automatically. Exit code 0 = success, 1 = failure, 2 = cancelled.
 
 ## 8. Architecture and extending
 
 Unity editor code only (`Editor/`, assembly `AISpriteAnimation.Editor`); no runtime code, no models in the repository.
-`SkeletonPoses` (procedural poses) feeds both `SpriteRig` and the OpenPose images; `SpriteFrameProcessor` does canvas, palette, masking, crop and pivot; `SpriteAnimationImporter` imports and builds clips;
+`RigDefinition` / `SpriteRigAsset` (joints + part map), `RigAnimator` (poses, `IRigPoseProvider`) and `SpriteRig` (hierarchy renderer) form the Rig method; `SkeletonPoses` draws the OpenPose images for AI Redraw; `SpriteFrameProcessor` does canvas, palette, masking, crop and pivot; `SpriteAnimationImporter` imports and builds clips;
 `IAIAnimationBackend` / `ComfyUIAnimationBackend` / `ComfyUIClient` / `ComfyUIProcessManager` are the ComfyUI side. Add a pose style in `SkeletonPoses`; another model or service behind `IAIAnimationBackend`.
 
 ## Troubleshooting
@@ -191,8 +231,8 @@ Unity editor code only (`Editor/`, assembly `AISpriteAnimation.Editor`); no runt
 |---|---|
 | *ComfyUI could not be started or is not reachable at ...* | AIRedraw only. Followed by the reason and ComfyUI's last output lines. Check the *ComfyUI Folder*. |
 | *ComfyUI rejected the workflow* | Lists the failing nodes (missing node pack or model file). Run Diagnostics > Validate with ComfyUI. |
-| Head or legs cut at the wrong place (Rig) | Adjust *Rig Neck Line* / *Rig Hip Line* in the settings asset. |
-| Sword/cape breaks apart (Rig) | Adjust *Rig Leg Half Width* / *Rig Body Half Width*. |
+| A part moves with the wrong pixels (Rig) | Open the Sprite Rig Editor: move the joints and paint the parts. |
+| Gaps or ghosting where an arm swings away (Rig) | Paint the arm pixels as arm; the vacated spot is filled with the surrounding body colour. |
 | Out of GPU memory (AIRedraw) | Use *Generation Size* 512. |
 
 Uploaded sprites remain in `ComfyUI/input/unity_ai_animation/` (the API cannot delete them). License: MIT.

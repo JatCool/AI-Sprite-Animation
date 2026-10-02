@@ -62,6 +62,18 @@ namespace AISpriteAnimation
             new Color32(0, 0, 0, 255),
         };
 
+        /// <summary>The source sprite's pixels (bottom-left origin) cropped to its rect.</summary>
+        public static Color32[] LoadSpritePixels(SourceSprite source, out int sw, out int sh)
+        {
+            Color32[] px = LoadPixels(File.ReadAllBytes(source.AssetPath), out int texW, out int texH);
+            var r = source.Rect;
+            if (r.xMax > texW || r.yMax > texH) throw new InvalidOperationException("Sprite rect lies outside the texture.");
+            sw = r.width; sh = r.height;
+            var sprite = new Color32[sw * sh];
+            for (int y = 0; y < sh; y++) Array.Copy(px, (r.y + y) * texW + r.x, sprite, y * sw, sw);
+            return sprite;
+        }
+
         public static PreparedInput PrepareInput(SourceSprite source, AIAnimationSettings settings)
         {
             Color32[] px = LoadPixels(File.ReadAllBytes(source.AssetPath), out int texW, out int texH);

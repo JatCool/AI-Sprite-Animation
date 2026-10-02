@@ -32,8 +32,7 @@ namespace AISpriteAnimation
                     case "paddingPercent": s.paddingPercent = f; break;
                     case "noiseType": s.noiseType = v; break;
                     case "mode": s.mode = v.ToLowerInvariant().StartsWith("ai") ? AnimationMode.AIRedraw : AnimationMode.Rig; break;
-                    case "rigSwing": p.rigSwing = f; break;
-                    case "rigMoveArm": p.rigMoveArm = f > 0; break;
+                    case "rigIntensity": p.rigIntensity = f; break;
                     case "tailBufferFrames": s.tailBufferFrames = (int)f; break;
                     case "keyTolerance": s.keyTolerance = f; break;
                     case "cropMarginPixels": s.cropMarginPixels = (int)f; break;
@@ -126,6 +125,26 @@ namespace AISpriteAnimation
             }
             if (Arg("-aiTimeout") != null) settings.generationTimeoutSeconds = int.Parse(Arg("-aiTimeout"));
 
+            // Optional: build/refresh the rig of this sprite from a joints file ("JointName x y" per line, "ground y"), then continue or stop.
+            if (Arg("-aiRigJoints") != null)
+            {
+                if (!SourceSprite.TryResolve(source, settings, out SourceSprite rigSource, out string rigError)) { Debug.LogError("[AI Sprite Animation] " + rigError); EditorApplication.Exit(1); return; }
+                var rigAsset = SpriteRigAsset.FindFor(rigSource, settings) ?? SpriteRigAsset.CreateAuto(rigSource, settings);
+                foreach (string line in System.IO.File.ReadAllLines(Arg("-aiRigJoints")))
+                {
+                    string[] t = line.Split(new[] { ' ', '	' }, StringSplitOptions.RemoveEmptyEntries);
+                    var inv = System.Globalization.CultureInfo.InvariantCulture;
+                    if (t.Length == 3 && Enum.TryParse(t[0], out RigJoint joint)) rigAsset.definition.SetJoint(joint, new Vector2(float.Parse(t[1], inv), float.Parse(t[2], inv)));
+                    else if (t.Length == 2 && t[0] == "ground") rigAsset.definition.groundY = float.Parse(t[1], inv);
+                }
+                Color32[] rigPixels = SpriteFrameProcessor.LoadSpritePixels(rigSource, out int rsw, out int rsh);
+                RigAutoBuilder.AssignParts(rigAsset.definition, rigPixels, rsw, rsh, settings.AutoRigParams());
+                rigAsset.Commit();
+                AssetDatabase.SaveAssets();
+                Debug.Log("[AI Sprite Animation] Rig written: " + AssetDatabase.GetAssetPath(rigAsset));
+                if (Arg("-aiRigOnly") != null) { EditorApplication.Exit(0); return; }
+            }
+
             var options = new GenerationOptions
             {
                 Source = source,
@@ -134,6 +153,7 @@ namespace AISpriteAnimation
                 Fps = int.Parse(Arg("-aiFps", preset.fps.ToString())),
                 Loop = preset.loop,
                 Seed = long.Parse(Arg("-aiSeed", "-1")),
+                AutoCreateRig = true,
                 SettingsOverride = overridden ? settings : null,
                 Controller = Arg("-aiController") != null ? AssetDatabase.LoadAssetAtPath<AnimatorController>(Arg("-aiController")) : null,
             };

@@ -60,15 +60,15 @@ namespace AISpriteAnimation
                 if (source != null && !SourceSprite.IsValidSelection(source)) source = null;
 
                 EditorGUI.BeginChangeCheck();
-                var newMode = (AnimationMode)EditorGUILayout.EnumPopup(new GUIContent("Mode", "Rig: moves the source sprite's own pixels with the skeleton (exact identity, instant, no ComfyUI). AIRedraw: AnimateDiff redraws each frame (needs ComfyUI, approximate identity)."), settings.mode);
+                int newMode = EditorGUILayout.Popup(new GUIContent("Animation Method", "Rig moves the sprite's own pixels with a bone hierarchy: exact identity, instant, no AI. AI Redraw lets AnimateDiff redraw each frame: slower, needs a GPU and ComfyUI, and changes pixel-level details."),
+                    (int)settings.mode, AnimationModeLabels.Labels);
                 if (EditorGUI.EndChangeCheck())
                 {
-                    settings.mode = newMode;
+                    settings.mode = (AnimationMode)newMode;
                     EditorUtility.SetDirty(settings);
                     RunDiagnostics(false);
                 }
-                if (settings.mode == AnimationMode.Rig)
-                    EditorGUILayout.HelpBox("Rig mode needs no ComfyUI: frames are made from the sprite's own pixels. Tune the body split (neck / hip lines) in the settings asset if the head or legs are cut in the wrong place.", MessageType.None);
+                DrawRigInfo(settings);
 
                 string[] names = settings.PresetNames();
                 if (names.Length == 0) EditorGUILayout.HelpBox("No presets in the settings asset.", MessageType.Warning);
@@ -162,6 +162,36 @@ namespace AISpriteAnimation
             if (!ComfyUIConnectionSettings.TryResolveLaunch(out _, out _, out _, out string launchError))
                 EditorGUILayout.HelpBox("Auto-start unavailable: " + launchError + "\n(An already-running ComfyUI is still used.)", MessageType.Warning);
             EditorGUI.indentLevel--;
+        }
+
+        private void DrawRigInfo(AIAnimationSettings settings)
+        {
+            if (settings.mode == AnimationMode.AIRedraw)
+            {
+                EditorGUILayout.HelpBox("AI Redraw is experimental: slower, GPU-dependent, and it changes pixel-level details (face, clothing) from frame to frame. Best for stylised sprites where exact pixels do not matter. For pixel art use Rig.", MessageType.Warning);
+                return;
+            }
+            if (source != null && SourceSprite.TryResolve(source, settings, out SourceSprite src, out _))
+            {
+                var rig = SpriteRigAsset.FindFor(src, settings);
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.PrefixLabel("Rig");
+                    if (rig != null)
+                    {
+                        EditorGUILayout.ObjectField(rig, typeof(SpriteRigAsset), false);
+                        if (GUILayout.Button("Edit Rig", GUILayout.Width(70))) SpriteRigEditorWindow.Open(source);
+                    }
+                    else
+                    {
+                        EditorGUILayout.LabelField("none yet", EditorStyles.miniLabel);
+                        if (GUILayout.Button("Open Rig Editor", GUILayout.Width(110))) SpriteRigEditorWindow.Open(source);
+                        if (GUILayout.Button("Auto-create", GUILayout.Width(90))) SpriteRigAsset.CreateAuto(src, settings);
+                    }
+                }
+                if (rig == null)
+                    EditorGUILayout.HelpBox("This sprite has no rig. The rig says where the neck, arms, legs, weapon and ground are. Generate will ask you to set it up.", MessageType.Info);
+            }
         }
 
         private void DrawDiagnostics()

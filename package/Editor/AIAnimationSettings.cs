@@ -28,10 +28,8 @@ namespace AISpriteAnimation
         [Range(0f, 1.5f)] public float controlNetStrength = 0.5f;
         [Tooltip("How long (fraction of the sampling steps) the Tile ControlNet stays active. Longer = colours and structure stay closer to the sprite.")]
         [Range(0.05f, 1f)] public float tileEndPercent = 0.6f;
-        [Tooltip("Rig mode: scales the skeleton's limb angles (1 = full swing; smaller sprites look better with ~0.6 for walking).")]
-        [Range(0.1f, 1.5f)] public float rigSwing = 0.6f;
-        [Tooltip("Rig mode: also move the forward-protruding arm/weapon (for attacks).")]
-        public bool rigMoveArm = false;
+        [Tooltip("Rig mode: scales all rotations of the animation (1 = as designed; lower for subtler movement).")]
+        [Range(0.1f, 1.5f)] public float rigIntensity = 1f;
         [Tooltip("AnimateDiff motion module strength.")]
         [Range(0f, 2f)] public float motionScale = 1f;
     }
@@ -48,10 +46,16 @@ namespace AISpriteAnimation
 
     /// <summary>
     /// How frames are produced.
-    /// Rig: the source sprite's own pixels are cut into parts (head, body, legs, weapon arm) and moved by the skeleton. Pixel-exact identity,
-    /// source alpha, no AI model needed. AIRedraw: AnimateDiff redraws every frame (more freedom, identity is approximate).
+    /// Rig (recommended for pixel art): the source sprite's own pixels are assigned to body parts (head, hair, body, both arms, both legs, weapon)
+    /// and moved by a bone hierarchy. Pixel-exact identity, the sprite's own alpha, fast, no AI model needed.
+    /// AIRedraw (experimental): AnimateDiff redraws every frame; slower, GPU-dependent, changes pixel-level details (face, clothes). For stylised sprites.
     /// </summary>
     public enum AnimationMode { Rig, AIRedraw }
+
+    public static class AnimationModeLabels
+    {
+        public static readonly string[] Labels = { "Rig (Recommended for Pixel Art)", "AI Redraw (Experimental)" };
+    }
 
     /// <summary>
     /// Project-level settings asset (created on first use, one per Unity project). Everything game-specific lives here:
@@ -66,16 +70,18 @@ namespace AISpriteAnimation
         public AnimationMode mode = AnimationMode.Rig;
 
         [Header("Rig (Rig mode)")]
-        [Tooltip("Where the neck is, as a fraction of the character's height from the top. Everything above moves as the head. Chibi sprites need a bigger value.")]
-        [Range(0.05f, 0.6f)] public float rigNeckLine = 0.15f;
-        [Tooltip("Where the hips are, as a fraction of the character's height from the top. Everything below is legs.")]
-        [Range(0.3f, 0.8f)] public float rigHipLine = 0.52f;
-        [Tooltip("Half width of the body column (fraction of height). Pixels further out on the facing side are treated as the arm/weapon.")]
-        [Range(0.05f, 0.4f)] public float rigBodyHalfWidth = 0.14f;
-        [Tooltip("Half width of the leg column (fraction of height). Pixels further out in the leg band (weapon tip, cape) stay with the body or arm.")]
+        [Tooltip("Folder for generated rig assets. Empty = next to the source sprite (Hero.png -> Hero_Rig.asset).")]
+        public string rigAssetFolder = "";
+        [Tooltip("Only used when a rig is created automatically (Auto-create): neck position as a fraction of the character's height from the top. Refine in the Sprite Rig Editor.")]
+        [Range(0.05f, 0.6f)] public float rigNeckLine = 0.33f;
+        [Tooltip("Auto-create: hip position as a fraction of the character's height from the top.")]
+        [Range(0.3f, 0.85f)] public float rigHipLine = 0.65f;
+        [Tooltip("Auto-create: half width of the leg column (fraction of height). Pixels further out in the leg band (weapon tip, cape) stay with the body.")]
         [Range(0.03f, 0.4f)] public float rigLegHalfWidth = 0.12f;
-        [Tooltip("How much of the skeleton's arm swing the forward arm/weapon follows (it pivots at its base).")]
-        [Range(0.1f, 1f)] public float rigArmGain = 0.3f;
+        [Tooltip("Auto-create: distance from the arm lines within which pixels count as arm (fraction of height).")]
+        [Range(0.01f, 0.15f)] public float rigArmRadius = 0.05f;
+        [Tooltip("Auto-create: leg pixels belong to both legs (full-width overlapping legs) instead of being split down the middle.")]
+        public bool rigDuplicateLegs = true;
 
         [Header("Workflow (AIRedraw mode)")]
         [Tooltip("AIRedraw: generated frames are clipped to the posed source sprite's silhouette grown by this many pixels, so stray blobs and background bleed never reach the final frames.")]
@@ -155,13 +161,13 @@ namespace AISpriteAnimation
 
         public static List<AnimationPreset> CreateDefaultPresets() => new List<AnimationPreset>
         {
-            new AnimationPreset { name = "Idle", frames = 8, fps = 12, loop = true, poseKind = "idle", rigSwing = 1f, poseStrength = 1.8f, denoise = 0.8f,
+            new AnimationPreset { name = "Idle", frames = 8, fps = 12, loop = true, poseKind = "idle", poseStrength = 1.8f, denoise = 0.8f,
                 controlNetStrength = 0.6f, tileEndPercent = 0.6f, ipAdapterWeight = 1.0f, prompt = "idle, standing, breathing" },
             new AnimationPreset { name = "Walk", frames = 8, fps = 12, loop = true, poseKind = "walk", poseStrength = 2.1f, denoise = 0.92f,
                 controlNetStrength = 0.5f, tileEndPercent = 0.6f, ipAdapterWeight = 1.0f, prompt = "walk cycle, walking" },
-            new AnimationPreset { name = "Run", frames = 8, fps = 14, loop = true, poseKind = "run", rigSwing = 0.8f, poseStrength = 2.0f, denoise = 0.9f, motionScale = 1.2f,
+            new AnimationPreset { name = "Run", frames = 8, fps = 14, loop = true, poseKind = "run", poseStrength = 2.0f, denoise = 0.9f, motionScale = 1.2f,
                 controlNetStrength = 0.5f, tileEndPercent = 0.6f, ipAdapterWeight = 1.0f, prompt = "run cycle, running fast" },
-            new AnimationPreset { name = "Attack", frames = 10, fps = 12, loop = false, poseKind = "attack", rigSwing = 1f, rigMoveArm = true, poseStrength = 2.0f, denoise = 0.9f, motionScale = 1.2f,
+            new AnimationPreset { name = "Attack", frames = 10, fps = 12, loop = false, poseKind = "attack", poseStrength = 2.0f, denoise = 0.9f, motionScale = 1.2f,
                 controlNetStrength = 0.5f, tileEndPercent = 0.6f, ipAdapterWeight = 1.0f, prompt = "attack, swinging sword" },
         };
 
@@ -180,6 +186,11 @@ namespace AISpriteAnimation
         }
 
         /// <summary>The workflow text: the project's override, or the one shipped in the package.</summary>
+        public RigAutoParams AutoRigParams() => new RigAutoParams
+        {
+            neckLine = rigNeckLine, hipLine = rigHipLine, legHalfWidth = rigLegHalfWidth, armRadius = rigArmRadius, duplicateLegs = rigDuplicateLegs,
+        };
+
         public string LoadWorkflowText()
         {
             if (workflow != null) return workflow.text;

@@ -3,6 +3,19 @@
 All notable changes to this package are documented here. The project follows [Semantic Versioning](https://semver.org/):
 `MAJOR` = breaking changes (settings/workflow format, API), `MINOR` = backwards-compatible features, `PATCH` = fixes.
 
+## 1.1.0
+
+- **Rig method rebuilt around a real rig.** A `SpriteRigAsset` (`<Sprite>_Rig.asset`) stores 15 joints, the ground line and a per-pixel part map with 14 parts:
+  head, hair, body, near/far arm (upper, lower+hand), weapon, near/far leg (upper, lower, foot). Overlapping legs supported.
+- **Bone hierarchy** (forward kinematics): rotating an upper arm carries the forearm and weapon; hair swings with lag.
+- **Sprite Rig Editor** (Tools > AI Sprite Animation > Sprite Rig Editor): drag joints and the ground line, paint/fill parts, auto-assign, live animation preview, undo.
+- **New procedural animations**: walk/run cycles with alternating legs and counter-swinging arms; attack with anticipation, swing, follow-through and recovery; breathing idle.
+  Poses are provided through `IRigPoseProvider` (extension point for a future "AI Pose + Rig" mode).
+- **Grounding**: the lowest foot pixel lands on the ground line every frame; only intentional hops leave it; translations are pixel-snapped.
+- Vacated torso spots (where an arm swung away) are filled with the surrounding body colour.
+- Animation Method in the window: *Rig (Recommended for Pixel Art)* / *AI Redraw (Experimental)*. Generating without a rig asks to open the Rig Editor or auto-create one (batch mode auto-creates).
+- Removed the old per-preset `Rig Swing`/`Rig Move Arm` and the global body/arm-gain settings (replaced by the rig asset and `Rig Intensity`).
+
 ## 1.0.0
 
 First release.

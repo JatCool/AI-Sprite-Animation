@@ -21,6 +21,8 @@ namespace AISpriteAnimation
         public string ExtraNegativePrompt = "";
         public long Seed = -1;                       // < 0 = random
         public AnimatorController Controller;        // optional
+        /// <summary>Create a rig automatically when the sprite has none (otherwise the user is asked; batch mode always auto-creates).</summary>
+        public bool AutoCreateRig;
 
         /// <summary>Use these settings instead of the project's settings asset (in-memory only; used by the self-test and batch overrides).</summary>
         public AIAnimationSettings SettingsOverride;
@@ -64,9 +66,35 @@ namespace AISpriteAnimation
             if (options.Fps < 1) return Fail("FPS must be at least 1.");
             if (settings.generationSize % 8 != 0 || settings.generationSize < 256) return Fail("Generation size must be a multiple of 8 and at least 256.");
 
+            // Rig mode needs a rig for this sprite. AIRedraw only needs a silhouette guide, which is built in memory.
+            bool useAI = settings.mode == AnimationMode.AIRedraw;
+            SpriteRigAsset rigAsset = SpriteRigAsset.FindFor(source, settings);
+            if (rigAsset == null)
+            {
+                if (useAI) rigAsset = SpriteRigAsset.CreateAuto(source, settings, save: false);
+                else if (options.AutoCreateRig || Application.isBatchMode)
+                {
+                    rigAsset = SpriteRigAsset.CreateAuto(source, settings);
+                    Debug.Log($"[AI Sprite Animation] Created a starting rig for '{source.Name}': {AssetDatabase.GetAssetPath(rigAsset)}. Refine it in Tools > AI Sprite Animation > Sprite Rig Editor.", rigAsset);
+                }
+                else
+                {
+                    int choice = EditorUtility.DisplayDialogComplex("No rig for this sprite",
+                        $"'{source.Name}' has no rig yet. The rig tells the animator where the neck, arms, legs, weapon and ground are.\n\n" +
+                        "Open the Sprite Rig Editor to set it up (recommended), or create a starting rig automatically and refine it later.",
+                        "Open Rig Editor", "Cancel", "Auto-create");
+                    if (choice == 0)
+                    {
+                        SpriteRigEditorWindow.Open(options.Source);
+                        return new GenerationOutcome { Cancelled = true, Error = "Set up the rig in the Sprite Rig Editor, then generate again." };
+                    }
+                    if (choice == 1) return new GenerationOutcome { Cancelled = true, Error = "Cancelled: the sprite has no rig." };
+                    rigAsset = SpriteRigAsset.CreateAuto(source, settings);
+                }
+            }
+
             IsRunning = true;
             EditorApplication.LockReloadAssemblies(); // a script reload mid-run would abort the run and kill ComfyUI
-            bool useAI = settings.mode == AnimationMode.AIRedraw;
             IAIAnimationBackend backend = useAI ? (backendOverride ?? new ComfyUIAnimationBackend(settings)) : null;
             string tempDir = Path.Combine(Path.GetDirectoryName(Application.dataPath), "Temp", "AISpriteAnimation", Guid.NewGuid().ToString("N"));
             var outcome = new GenerationOutcome();
@@ -79,20 +107,11 @@ namespace AISpriteAnimation
                 PreparedInput input = SpriteFrameProcessor.PrepareInput(source, settings);
                 File.WriteAllBytes(Path.Combine(tempDir, "input.png"), input.Png);
 
-                var rigOptions = new RigOptions
-                {
-                    swing = preset.rigSwing,
-                    moveForwardArm = preset.rigMoveArm,
-                    bodyHalfWidth = settings.rigBodyHalfWidth,
-                    legHalfWidth = settings.rigLegHalfWidth,
-                    neckLine = settings.rigNeckLine,
-                    hipLine = settings.rigHipLine,
-                    armGain = settings.rigArmGain,
-                };
                 // The posed source sprite: the final frames in Rig mode, and the source-derived silhouette that masks the AI frames in AIRedraw mode.
                 progress?.Invoke("Posing the sprite...", 0.05f);
-                var rigFrames = SpriteRig.Animate(input.SpritePixels, input.SrcWidth, input.SrcHeight, preset.poseKind, options.Frames, options.Frames,
-                    input.Cells, input.LeftCells, input.BottomCells, settings.facing == SpriteFacing.Left, rigOptions);
+                RigPose[] rigPoses = ProceduralRigPoses.Instance.GetPoses(preset.poseKind, options.Frames, options.Frames, preset.rigIntensity);
+                var rigFrames = SpriteRig.Render(rigAsset.definition, input.SpritePixels, rigPoses, input.Cells, input.LeftCells, input.BottomCells,
+                    settings.facing == SpriteFacing.Left);
 
                 List<FrameBuffer> buffers;
                 if (!useAI)

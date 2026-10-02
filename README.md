@@ -1,7 +1,7 @@
 # AI-Sprite-Animation
 
 Unity package **`com.limpo.ai-sprite-animation`**: generate 2D sprite animations (Idle / Walk / Run / Attack) from one sprite, inside the Unity editor.
-Default **Rig** mode keeps the character pixel-exact; optional **AIRedraw** mode uses a local ComfyUI (AnimateDiff). No cloud services, no models in this repository.
+Default **Rig (Recommended for Pixel Art)** keeps the character pixel-exact; **AI Redraw (Experimental)** uses a local ComfyUI (AnimateDiff). No cloud services, no models in this repository.
 
 The package lives in [`package/`](package/). Full documentation: [`package/README.md`](package/README.md). Benchmarks: [`package/Documentation~/benchmarks.md`](package/Documentation~/benchmarks.md).
 

@@ -12,6 +12,8 @@ namespace AISpriteAnimation
         public RectInt Rect;          // pixel rect inside the texture (bottom-left origin)
         public Vector2 Pivot01;       // pivot normalised to the rect
         public TextureImporter Importer;
+        public bool IsSliced;          // a sprite cut from a sprite sheet
+        public string SpriteName;      // its name inside the sheet
 
         public static bool IsValidSelection(Object obj) => obj is Texture2D || obj is Sprite;
 
@@ -71,6 +73,8 @@ namespace AISpriteAnimation
                 Rect = rect,
                 Pivot01 = pivot,
                 Importer = importer,
+                IsSliced = obj is Sprite sp && sp.name != Path.GetFileNameWithoutExtension(path),
+                SpriteName = obj.name,
             };
             return true;
         }
