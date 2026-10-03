@@ -31,7 +31,26 @@ namespace AISpriteAnimation
                     case "generationSize": s.generationSize = (int)f; break;
                     case "paddingPercent": s.paddingPercent = f; break;
                     case "noiseType": s.noiseType = v; break;
-                    case "mode": s.mode = v.ToLowerInvariant().StartsWith("ai") ? AnimationMode.AIRedraw : AnimationMode.Rig; break;
+                    case "mode": s.mode = ParseMode(v); break;
+                    case "poseGuidance": s.aiPoseGuidance = f; break;
+                    case "poseSize": s.aiPoseGenerationSize = (int)f; break;
+                    case "sketchVariation": s.aiPoseSketchVariation = f; break;
+                    case "evidenceWeight": s.aiPoseEvidenceWeight = f; break;
+                    case "poseBackend": s.poseBackend = ParseBackend(v); break;
+                    case "candidates": s.poseCandidates = (int)f; break;
+                    case "videoSteps": s.poseVideoSteps = (int)f; break;
+                    case "videoFrames": s.poseVideoFrames = (int)f; break;
+                    case "videoMotion": s.poseVideoMotionScale = f; break;
+                    case "videoWidth": s.poseVideoWidth = (int)f; break;
+                    case "videoHeight": s.poseVideoHeight = (int)f; break;
+                    case "sdposeModel": s.sdposeModelName = v; break;
+                    case "goodEnough": s.poseGoodEnoughQuality = f; break;
+                    case "minQuality": s.poseMinQuality = f; break;
+                    case "checkpoint": s.checkpointName = v; break;
+                    case "smoothing": s.poseCleanup.smoothing = f; s.poseCleanup.smoothingEnabled = f > 0f; break;
+                    case "smoothPasses": s.poseCleanup.passes = (int)f; break;
+                    case "stepDegrees": s.poseCleanup.stepDegrees = f; break;
+                    case "preserveDegrees": s.poseCleanup.preserveDegrees = f; break;
                     case "rigIntensity": p.rigIntensity = f; break;
                     case "tailBufferFrames": s.tailBufferFrames = (int)f; break;
                     case "keyTolerance": s.keyTolerance = f; break;
@@ -49,6 +68,24 @@ namespace AISpriteAnimation
                 }
             }
             return s;
+        }
+
+        // sdpose | legacy | procedural
+        private static PoseBackend ParseBackend(string v)
+        {
+            v = (v ?? "").ToLowerInvariant();
+            if (v.StartsWith("leg") || v.StartsWith("sketch")) return PoseBackend.SketchEvidenceLegacy;
+            if (v.StartsWith("proc")) return PoseBackend.ProceduralFallback;
+            return PoseBackend.SDPose;
+        }
+
+        // rig | pose (AI Pose + Rig) | redraw (AI Redraw)
+        private static AnimationMode ParseMode(string v)
+        {
+            v = (v ?? "").ToLowerInvariant();
+            if (v.StartsWith("pose") || v.StartsWith("aipose")) return AnimationMode.AIPoseRig;
+            if (v.StartsWith("ai") || v.StartsWith("redraw")) return AnimationMode.AIRedraw;
+            return AnimationMode.Rig;
         }
 
         public static void Run()
@@ -70,8 +107,9 @@ namespace AISpriteAnimation
             if (Arg("-aiConfigureOnly") != null) { EditorApplication.Exit(0); return; }
 
             var settings = AIAnimationSettings.GetOrCreate();
-            bool overridden = Arg("-aiOverride") != null || Arg("-aiWorkflow") != null;
+            bool overridden = Arg("-aiOverride") != null || Arg("-aiWorkflow") != null || Arg("-aiMode") != null;
             if (overridden) settings = CloneWithOverrides(settings, Arg("-aiOverride") ?? "", Arg("-aiPreset", "Walk"));
+            if (Arg("-aiMode") != null) settings.mode = ParseMode(Arg("-aiMode"));
             if (Arg("-aiWorkflow") != null) settings.workflow = new TextAsset(System.IO.File.ReadAllText(Arg("-aiWorkflow")));
             if (Arg("-aiSelfTest") != null)
             {
@@ -145,6 +183,47 @@ namespace AISpriteAnimation
                 if (Arg("-aiRigOnly") != null) { EditorApplication.Exit(0); return; }
             }
 
+            // AI Pose + Rig: -aiPoseAction generate (run the AI, save poses, stop) | build (saved poses only, no ComfyUI; default) | both (regenerate, then build)
+            //                -aiPoseDump <folder> writes the guidance images and the AI evidence frames for inspection.
+            string poseAction = Arg("-aiPoseAction", settings.mode == AnimationMode.AIPoseRig ? "build" : null);
+            if (poseAction != null)
+            {
+                int toolCode = BatchPoseTools.TryRun(poseAction, a => Arg(a), settings, source, preset, int.Parse(Arg("-aiFrames", preset.frames.ToString())), int.Parse(Arg("-aiFps", preset.fps.ToString())));
+                if (toolCode >= 0) { EditorApplication.Exit(toolCode); return; }
+            }
+            if (poseAction == "generate")
+            {
+                var poseCts = new CancellationTokenSource();
+                if (Arg("-aiCancelAfter") != null) poseCts.CancelAfter(TimeSpan.FromSeconds(double.Parse(Arg("-aiCancelAfter"))));
+                string lastPose = null;
+                var poseTask = AIPoseGenerator.GenerateAsync(new PoseGenerationOptions
+                {
+                    Source = source, PresetName = preset.name,
+                    Frames = int.Parse(Arg("-aiFrames", preset.frames.ToString())), Fps = int.Parse(Arg("-aiFps", preset.fps.ToString())), Loop = preset.loop,
+                    Seed = long.Parse(Arg("-aiSeed", "-1")), AutoCreateRig = true,
+                    SettingsOverride = overridden ? settings : null, DumpFolder = Arg("-aiPoseDump"),
+                    Backend = Arg("-aiPoseBackend") != null ? ParseBackend(Arg("-aiPoseBackend")) : (PoseBackend?)null,
+                }, (m, p) =>
+                {
+                    if (m.StartsWith("Generating animation") || m == lastPose) return;
+                    lastPose = m;
+                    Debug.Log($"[AI Sprite Animation] {p:P0} {m}");
+                }, poseCts.Token);
+                EditorApplication.CallbackFunction pollPose = null;
+                pollPose = () =>
+                {
+                    if (!poseTask.IsCompleted) return;
+                    EditorApplication.update -= pollPose;
+                    var po = poseTask.Result;
+                    if (po.Success)
+                        Debug.Log($"[AI Sprite Animation] BATCH POSE SUCCESS: {AssetDatabase.GetAssetPath(po.Asset)} | {po.Asset.FrameCount} frames | backend: {po.Backend} (AI motion: {po.IsAI}) | total {po.GenerationSeconds:0.0}s (ComfyUI {po.ComfySeconds:0.0}s, analysis {po.AnalysisSeconds:0.0}s) | candidates {po.Candidates}, quality {po.Quality:0.00} | {po.Contribution?.Summary} {po.Report}");
+                    else Debug.Log($"[AI Sprite Animation] BATCH POSE {(po.Cancelled ? "CANCELLED" : "FAILED")}: {po.Error}");
+                    EditorApplication.Exit(po.Success ? 0 : po.Cancelled ? 2 : 1);
+                };
+                EditorApplication.update += pollPose;
+                return;
+            }
+
             var options = new GenerationOptions
             {
                 Source = source,
@@ -154,6 +233,7 @@ namespace AISpriteAnimation
                 Loop = preset.loop,
                 Seed = long.Parse(Arg("-aiSeed", "-1")),
                 AutoCreateRig = true,
+                PoseSource = poseAction == "both" ? PoseSource.Regenerate : PoseSource.Saved,
                 SettingsOverride = overridden ? settings : null,
                 Controller = Arg("-aiController") != null ? AssetDatabase.LoadAssetAtPath<AnimatorController>(Arg("-aiController")) : null,
             };
@@ -175,6 +255,8 @@ namespace AISpriteAnimation
                 if (!task.IsCompleted) return;
                 EditorApplication.update -= poll;
                 var outcome = task.Result;
+                if (outcome.Success && outcome.PoseAsset != null)
+                    Debug.Log($"[AI Sprite Animation] AI POSE BUILD: poses from {AssetDatabase.GetAssetPath(outcome.PoseAsset)} ({(outcome.PosesGeneratedNow ? "generated now" : "saved, ComfyUI not used")}); build {outcome.BuildSeconds:0.0}s\n{outcome.PoseReport}");
                 Debug.Log(outcome.Success ? $"[AI Sprite Animation] BATCH SUCCESS: {AssetDatabase.GetAssetPath(outcome.Clip)}"
                                           : $"[AI Sprite Animation] BATCH {(outcome.Cancelled ? "CANCELLED" : "FAILED")}: {outcome.Error}");
                 EditorApplication.Exit(outcome.Success ? 0 : outcome.Cancelled ? 2 : 1);

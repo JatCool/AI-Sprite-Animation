@@ -26,5 +26,6 @@ namespace AISpriteAnimation
         }
 
         public static string DefaultWorkflow => Root + "/Workflows/AnimateDiffSprite.json";
+        public static string SdposeWorkflow => Root + "/Workflows/SDPoseMotion.json";
     }
 }

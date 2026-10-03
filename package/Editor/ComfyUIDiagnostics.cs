@@ -33,6 +33,7 @@ namespace AISpriteAnimation
             ["v3_sd15_mm.ckpt"] = new Hint { Folder = "models/animatediff_models", Url = "https://huggingface.co/guoyww/animatediff/resolve/main/v3_sd15_mm.ckpt" },
             ["control_v11f1e_sd15_tile.pth"] = new Hint { Folder = "models/controlnet", Url = "https://huggingface.co/lllyasviel/ControlNet-v1-1/resolve/main/control_v11f1e_sd15_tile.pth" },
             ["control_v11p_sd15_openpose.pth"] = new Hint { Folder = "models/controlnet", Url = "https://huggingface.co/lllyasviel/ControlNet-v1-1/resolve/main/control_v11p_sd15_openpose.pth" },
+            [SDPoseModel.DefaultFileName] = new Hint { Folder = "models/checkpoints", Url = SDPoseModel.DownloadUrl + "  (1.92 GB; or use 'Install / Download Model' in the window)" },
             ["ip-adapter-plus_sd15.safetensors"] = new Hint { Folder = "models/ipadapter", Url = "https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter-plus_sd15.safetensors" },
             ["CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"] = new Hint { Folder = "models/clip_vision", Url = "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors (rename to the file name shown)" },
         };
@@ -66,7 +67,10 @@ namespace AISpriteAnimation
             AddVersionInfo(items, settings, comfyRoot);
             if (settings.mode == AnimationMode.Rig)
                 items.Add(new DiagnosticItem("Mode", DiagnosticStatus.Ok, "Rig mode: ComfyUI is not needed",
-                    "Frames are made from the sprite's own pixels. The checks below only matter for AIRedraw mode."));
+                    "Frames are made from the sprite's own pixels. The checks below only matter for AI Pose + Rig (pose generation) and AI Redraw."));
+            else if (settings.mode == AnimationMode.AIPoseRig)
+                items.Add(new DiagnosticItem("Mode", DiagnosticStatus.Info, "AI Pose + Rig mode: ComfyUI is needed only for Generate Poses",
+                    "Build Animation from saved poses never starts ComfyUI. The checks below must pass to generate poses."));
             else items.Add(new DiagnosticItem("Mode", DiagnosticStatus.Info, "AIRedraw mode: ComfyUI is required"));
 
             // --- API ---
@@ -217,6 +221,29 @@ namespace AISpriteAnimation
             CheckOption(items, objectInfo, "ControlNet", "ControlNetLoader", "control_net_name", settings.tileControlNetName, "Tile ControlNet");
             CheckOption(items, objectInfo, "ControlNet", "ControlNetLoader", "control_net_name", settings.poseControlNetName, "OpenPose ControlNet");
 
+            // SDPose (AI Pose + Rig): the pose estimator checkpoint and the nodes of the SDPose workflow.
+            CheckNode(items, objectInfo, "SDPose", "SDPoseKeypointExtractor");
+            CheckNode(items, objectInfo, "SDPose", "PreviewAny");
+            CheckOption(items, objectInfo, "SDPose", "CheckpointLoaderSimple", "ckpt_name", settings.sdposeModelName, "SDPose model");
+            try
+            {
+                string sdText = settings.LoadSdposeWorkflowText();
+                if (string.IsNullOrWhiteSpace(sdText)) items.Add(new DiagnosticItem("SDPose", DiagnosticStatus.Error, "SDPose workflow not found", PackagePaths.SdposeWorkflow));
+                else
+                {
+                    string built = ComfyWorkflowBuilder.Build(sdText, SDPosePoseGenerator.WorkflowValues(settings, "walk", "", "", 1), requireInputImage: false);
+                    var sdNodes = (Dictionary<string, object>)MiniJson.Parse(built);
+                    int sdProblems = 0;
+                    foreach (var kv in sdNodes)
+                        if (MiniJson.Path(kv.Value, "class_type") is string cls && !objectInfo.ContainsKey(cls))
+                        {
+                            items.Add(new DiagnosticItem("SDPose", DiagnosticStatus.Error, $"Workflow node {kv.Key}: '{cls}' is not installed", NodeRepoHint(cls))); sdProblems++;
+                        }
+                    if (sdProblems == 0) items.Add(new DiagnosticItem("SDPose", DiagnosticStatus.Ok, "SDPose workflow valid", $"{sdNodes.Count} nodes, all installed"));
+                }
+            }
+            catch (Exception e) { items.Add(new DiagnosticItem("SDPose", DiagnosticStatus.Error, "SDPose workflow invalid", e.Message)); }
+
             // Generic workflow validation: every node class exists and every model/enum value used is accepted.
             string text = settings.LoadWorkflowText();
             if (string.IsNullOrWhiteSpace(text)) { items.Add(new DiagnosticItem("Workflow", DiagnosticStatus.Error, "No workflow found")); return; }
@@ -316,6 +343,7 @@ namespace AISpriteAnimation
             FileCheck(items, comfyRoot, "IPAdapter", "IPAdapter model", settings.ipAdapterModelFile, "models/ipadapter");
             FileCheck(items, comfyRoot, "IPAdapter", "CLIP Vision model", settings.clipVisionFile, "models/clip_vision");
             FileCheck(items, comfyRoot, "Models", "Checkpoint", settings.checkpointName, "models/checkpoints");
+            FileCheck(items, comfyRoot, "SDPose", "SDPose model", settings.sdposeModelName, "models/checkpoints");
             FileCheck(items, comfyRoot, "ControlNet", "Tile ControlNet", settings.tileControlNetName, "models/controlnet");
             FileCheck(items, comfyRoot, "ControlNet", "OpenPose ControlNet", settings.poseControlNetName, "models/controlnet");
         }

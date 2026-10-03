@@ -23,6 +23,33 @@ namespace AISpriteAnimation
         }
     }
 
+    /// <summary>The outputs of a finished prompt: images and text of every output node.</summary>
+    public sealed class ComfyResult
+    {
+        public readonly Dictionary<string, object> Outputs;
+        public ComfyResult(Dictionary<string, object> outputs) { Outputs = outputs; }
+
+        /// <summary>The first text output of a node (e.g. PreviewAny), or null.</summary>
+        public string TextOf(string nodeId)
+        {
+            if (Outputs != null && Outputs.TryGetValue(nodeId, out object node) && MiniJson.Path(node, "text") is List<object> texts && texts.Count > 0) return texts[0] as string;
+            return null;
+        }
+
+        public List<ComfyImageRef> ImagesOf(string nodeId)
+        {
+            var result = new List<ComfyImageRef>();
+            if (Outputs == null || !Outputs.TryGetValue(nodeId, out object node) || !(MiniJson.Path(node, "images") is List<object> images)) return result;
+            foreach (var img in images)
+            {
+                string filename = MiniJson.Path(img, "filename") as string;
+                if (filename != null) result.Add(new ComfyImageRef(nodeId, filename, MiniJson.Path(img, "subfolder") as string ?? "", MiniJson.Path(img, "type") as string ?? "output"));
+            }
+            result.Sort((a, b) => string.CompareOrdinal(a.Filename, b.Filename));
+            return result;
+        }
+    }
+
     /// <summary>Thin wrapper over the ComfyUI HTTP API (/system_stats, /upload/image, /prompt, /history, /view, /queue, /interrupt).</summary>
     public sealed class ComfyUIClient : IDisposable
     {
@@ -117,6 +144,13 @@ namespace AISpriteAnimation
         public async Task<List<ComfyImageRef>> WaitForCompletionAsync(string promptId, TimeSpan timeout, string outputNodeId,
             Action<string> status, CancellationToken ct)
         {
+            ComfyResult result = await WaitForResultAsync(promptId, timeout, status, ct);
+            return CollectImages(result.Outputs, outputNodeId);
+        }
+
+        /// <summary>Polls /history until the prompt finishes and returns all of its outputs (images and text).</summary>
+        public async Task<ComfyResult> WaitForResultAsync(string promptId, TimeSpan timeout, Action<string> status, CancellationToken ct)
+        {
             DateTime start = DateTime.UtcNow;
             while (true)
             {
@@ -144,7 +178,7 @@ namespace AISpriteAnimation
 
                     var outputs = MiniJson.Path(entry, "outputs") as Dictionary<string, object>;
                     if (outputs != null && (statusStr == "success" || MiniJson.Path(entry, "status", "completed") is bool done && done))
-                        return CollectImages(outputs, outputNodeId);
+                        return new ComfyResult(outputs);
                 }
 
                 status?.Invoke(await DescribeQueueAsync(promptId, elapsed));

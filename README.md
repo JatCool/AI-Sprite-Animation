@@ -1,9 +1,10 @@
 # AI-Sprite-Animation
 
 Unity package **`com.limpo.ai-sprite-animation`**: generate 2D sprite animations (Idle / Walk / Run / Attack) from one sprite, inside the Unity editor.
-Default **Rig (Recommended for Pixel Art)** keeps the character pixel-exact; **AI Redraw (Experimental)** uses a local ComfyUI (AnimateDiff). No cloud services, no models in this repository.
+Default **Rig (Recommended for Pixel Art)** keeps the character pixel-exact; **AI Pose + Rig (Beta)** lets AI generate only the *motion* (AnimateDiff video + SDPose pose estimation through a local ComfyUI, saved as reusable pose data) while the rig still draws the original pixels;
+**AI Redraw (Experimental)** redraws frames with AnimateDiff. No cloud services, no models in this repository.
 
-The package lives in [`package/`](package/). Full documentation: [`package/README.md`](package/README.md). Benchmarks: [`package/Documentation~/benchmarks.md`](package/Documentation~/benchmarks.md).
+**Taking over this project? Read [`package/Documentation~/HANDOVER.md`](package/Documentation~/HANDOVER.md) first.** The package lives in [`package/`](package/). Full documentation: [`package/README.md`](package/README.md). Benchmarks: [`package/Documentation~/benchmarks.md`](package/Documentation~/benchmarks.md).
 
 ## Install (Unity 6000.6+)
 
@@ -32,7 +33,7 @@ Consumers update by changing the tag in their `manifest.json` URL.
 
 ```
 package/            Unity package (Editor code, Workflows/, Documentation~/, package.json, README, CHANGELOG)
-tools/              build_workflow.py (regenerates the workflow's pose slots)
+tools/              build_workflow.py (regenerates the workflow's pose slots), posetests/ (console tests of the pose layers), riglab/, eval_identity.py
 ```
 
 License: MIT.

@@ -30,7 +30,7 @@ namespace AISpriteAnimation
         RigPose[] GetPoses(string animation, int frameCount, int cycle, float intensity);
     }
 
-    /// <summary>Procedural Idle / Walk / Run / Attack poses.</summary>
+    /// <summary>Procedural Idle / Walk / Run / Attack / Jump / Sit / Crouch / CrouchWalk poses.</summary>
     public sealed class ProceduralRigPoses : IRigPoseProvider
     {
         public static readonly ProceduralRigPoses Instance = new ProceduralRigPoses();
@@ -50,6 +50,10 @@ namespace AISpriteAnimation
                 case "run": return Locomotion(t, n, k, true);
                 case "idle": return Idle(t, n, k);
                 case "attack": return Attack(t, n, k);
+                case "jump": return Jump(t, n, k);
+                case "sit": return Sit(t, n, k);
+                case "crouch": return Crouch(t, n, k);
+                case "crouchwalk": return CrouchWalk(t, n, k);
                 default: return new RigPose();   // rest pose
             }
         }
@@ -130,6 +134,143 @@ namespace AISpriteAnimation
             p.SetDegrees(RigPart.LegNearUpper, V(9) * k); p.SetDegrees(RigPart.LegNearLower, V(10) * k); p.SetDegrees(RigPart.FootNear, V(11) * k);
             p.SetDegrees(RigPart.LegFarUpper, V(12) * k); p.SetDegrees(RigPart.LegFarLower, V(13) * k); p.SetDegrees(RigPart.FootFar, V(14) * k);
             p.root = new Vector2(V(15) * k, 0f);
+            return p;
+        }
+
+        // ---- jump: crouch -> launch -> rise -> apex tuck -> fall -> landing crouch -> recover (one-shot; both endpoints are sampled) ----
+        // The clip carries NO travel height: a game moves the character itself (rigidbody), so the clip only changes the pose. `hop` merely keeps the hips at standing
+        // height while the tucked legs shorten (the renderer otherwise pins the lowest foot to the ground line); the crouches sink the body, which is wanted.
+        // columns: u, body, head, hair, upperN, lowerN, weapon, upperF, lowerF, thighN, shinN, footN, thighF, shinF, footF, hop
+        // key times sit on the frame grid of the default 10-frame clip (frame i = i/9) so every key pose is rendered; other frame counts interpolate between them
+        private static readonly float[][] JumpKeys =
+        {
+            new[] { 0.00f,   0f,  0f,   0f,    5f,  10f,   0f,   -5f,   8f,    6f,  -4f,  -2f,   -6f,  -4f,   0f, 0f },
+            new[] { 2f/9f, -14f,  6f,  -6f,  -35f,  20f,  10f,  -40f,  20f,   58f, -98f,  28f,   50f, -88f,  24f, 0f },   // anticipation: crouch, arms swing back
+            new[] { 3f/9f,   4f, -2f,   4f,   80f,  10f, -62f,   70f,  10f,    4f,  -2f, -25f,   -2f,  -2f, -20f, 0f }, // launch: legs push off, arms thrown up
+            new[] { 4f/9f,   2f,  0f,   8f,   85f,  25f, -75f,   75f,  20f,   35f, -60f,   5f,   25f, -50f,   5f, 0f },    // rise: near knee comes up
+            new[] { 5f/9f,  -4f,  2f,  12f,   75f,  30f, -70f,   65f,  25f,   55f, -95f,  15f,   42f, -80f,  12f, 1f },    // apex: tucked
+            new[] { 6f/9f,  -2f,  1f,  13f,   65f,  32f, -62f,   58f,  28f,   38f, -72f,  12f,   32f, -62f,  10f, 1f },  // apex hold: still tucked, starting to open
+            new[] { 7f/9f,   0f,  0f,  14f,   55f,  35f, -55f,   50f,  30f,   20f, -25f,  15f,   14f, -25f,  10f, 0f },  // fall: legs reach down, arms out
+            new[] { 8f/9f, -10f,  4f,  -8f,   20f,  30f, -25f,    5f,  20f,   56f, -94f,  26f,   48f, -84f,  22f, 0f },    // landing: crouch absorbs
+            new[] { 1.00f,   0f,  0f,   0f,    5f,  10f,   0f,   -5f,   8f,    6f,  -4f,  -2f,   -6f,  -4f,   0f, 0f },
+        };
+
+        private static RigPose Jump(int t, int n, float k)
+        {
+            float u = n > 1 ? t / (float)(n - 1) : 0f;
+            int a = 0;
+            while (a < JumpKeys.Length - 2 && u > JumpKeys[a + 1][0]) a++;
+            float[] ka = JumpKeys[a], kb = JumpKeys[a + 1];
+            float f = Mathf.Clamp01((u - ka[0]) / (kb[0] - ka[0]));
+            f = f * f * (3f - 2f * f);   // ease in/out
+            float V(int i) => Mathf.Lerp(ka[i], kb[i], f);
+
+            var p = new RigPose();
+            p.SetDegrees(RigPart.Body, V(1) * k); p.SetDegrees(RigPart.Head, V(2) * k); p.SetDegrees(RigPart.Hair, V(3) * k);
+            p.SetDegrees(RigPart.ArmNearUpper, V(4) * k); p.SetDegrees(RigPart.ArmNearLower, V(5) * k); p.SetDegrees(RigPart.Weapon, V(6) * k);
+            p.SetDegrees(RigPart.ArmFarUpper, V(7) * k); p.SetDegrees(RigPart.ArmFarLower, V(8) * k);
+            p.SetDegrees(RigPart.LegNearUpper, V(9) * k); p.SetDegrees(RigPart.LegNearLower, V(10) * k); p.SetDegrees(RigPart.FootNear, V(11) * k);
+            p.SetDegrees(RigPart.LegFarUpper, V(12) * k); p.SetDegrees(RigPart.LegFarLower, V(13) * k); p.SetDegrees(RigPart.FootFar, V(14) * k);
+            p.hop = V(15) * k;
+            return p;
+        }
+
+        // ---- sit: a small dip, a squat, then the character drops onto the ground with the knees up, torso upright, and holds it (one-shot; the last frame is the held pose) ----
+        // The clip changes the pose only: the game shrinks the collider and keeps the feet on the ground, and the renderer pins the lowest foot to the ground line,
+        // so the thighs rising forward with the shins hanging down lowers the hips to the ground by themselves. Standing up again is the Animator going back to Idle.
+        // columns: u, body, head, hair, upperN, lowerN, weapon, upperF, lowerF, thighN, shinN, footN, thighF, shinF, footF, hop
+        // key times sit on the frame grid of the default 8-frame clip (frame i = i/7); other frame counts interpolate between them
+        private static readonly float[][] SitKeys =
+        {
+            new[] { 0.00f,   0f,  0f,   0f,    5f,  10f,   0f,   -5f,   8f,    6f,  -4f,  -2f,   -6f,  -4f,   0f, 0f },
+            new[] { 1f/7f,  -4f,  2f,   3f,  -10f,  14f,   0f,  -12f,  14f,   22f, -34f,  12f,   18f, -30f,  10f, 0f },   // anticipation: a small dip, arms swing back
+            new[] { 2f/7f, -10f,  4f,  -3f,   14f,  26f, -22f,   12f,  24f,   56f, -92f,  26f,   52f, -86f,  24f, 0f },   // squat
+            new[] { 4f/7f,  -7f,  2f,   8f,   34f,  30f, -38f,   28f,  28f,  100f,-110f,  14f,   92f,-102f,  12f, 0f },   // dropping: knees come up, hips go down
+            new[] { 6f/7f,   3f, -2f, -10f,   46f,  34f, -48f,   40f,  32f,  122f,-122f,   4f,  112f,-112f,   2f, 0f },   // impact: slight lean back, knees at their highest
+            new[] { 1.00f,  -3f,  1f,  -4f,   52f,  22f, -44f,   46f,  20f,  116f,-116f,   2f,  106f,-106f,   0f, 0f },   // settled: upright, forearms resting on the knees (the held pose)
+        };
+
+        private static RigPose Sit(int t, int n, float k)
+        {
+            float u = n > 1 ? t / (float)(n - 1) : 0f;
+            int a = 0;
+            while (a < SitKeys.Length - 2 && u > SitKeys[a + 1][0]) a++;
+            float[] ka = SitKeys[a], kb = SitKeys[a + 1];
+            float f = Mathf.Clamp01((u - ka[0]) / (kb[0] - ka[0]));
+            f = f * f * (3f - 2f * f);   // ease in/out
+            float V(int i) => Mathf.Lerp(ka[i], kb[i], f);
+
+            var p = new RigPose();
+            p.SetDegrees(RigPart.Body, V(1) * k); p.SetDegrees(RigPart.Head, V(2) * k); p.SetDegrees(RigPart.Hair, V(3) * k);
+            p.SetDegrees(RigPart.ArmNearUpper, V(4) * k); p.SetDegrees(RigPart.ArmNearLower, V(5) * k); p.SetDegrees(RigPart.Weapon, V(6) * k);
+            p.SetDegrees(RigPart.ArmFarUpper, V(7) * k); p.SetDegrees(RigPart.ArmFarLower, V(8) * k);
+            p.SetDegrees(RigPart.LegNearUpper, V(9) * k); p.SetDegrees(RigPart.LegNearLower, V(10) * k); p.SetDegrees(RigPart.FootNear, V(11) * k);
+            p.SetDegrees(RigPart.LegFarUpper, V(12) * k); p.SetDegrees(RigPart.LegFarLower, V(13) * k); p.SetDegrees(RigPart.FootFar, V(14) * k);
+            p.hop = V(15) * k;
+            return p;
+        }
+
+        // ---- crouch (goose step): the hips drop to about knee height (not onto the heels), the knees are tucked forward, the torso leans in and the head stays forward and low ----
+        // One-shot, the last frame is the held pose. Meant for passing narrow gaps or ducking under something flying at the character.
+        // The torso rotates about the hips and the head is its child: Head is always exactly -Body, so the head's net rotation is 0 and the face is not re-sampled
+        // (a tilted head distorts the face at this pixel size), while it still travels forward and down with the lean. The arms are children of the torso too: their
+        // values are the wanted world angles minus the lean. The legs are not children of the torso. The player's cloak tail follows the near thigh (rig mapping).
+        // The renderer pins the lowest foot to the ground line, so the folded legs lower the hips by themselves; the feet end flat (thigh + shin + foot = 0).
+        // columns: u, body, head, hair, upperN, lowerN, weapon, upperF, lowerF, thighN, shinN, footN, thighF, shinF, footF, hop
+        // key times sit on the frame grid of the default 6-frame clip (frame i = i/5); other frame counts interpolate between them
+        private static readonly float[][] CrouchKeys =
+        {
+            new[] { 0.00f,   0f,  0f,   0f,    5f,  10f,   0f,   -5f,   8f,    6f,  -4f,  -2f,   -6f,  -4f,   0f, 0f },
+            new[] { 1f/5f,  -8f,  8f,   0f,   12f,  16f,   2f,    8f,  14f,   40f, -60f,  22f,   34f, -52f,  20f, 0f },   // quick dip, torso starts to lean
+            new[] { 2f/5f, -20f, 20f,   0f,   28f,  22f,  -4f,   24f,  18f,   76f,-108f,  32f,   70f,-100f,  30f, 0f },
+            new[] { 3f/5f, -34f, 34f,   4f,   46f,  26f, -10f,   36f,  22f,  100f,-138f,  38f,   94f,-130f,  36f, 0f },   // bottom (slightly below the held pose)
+            new[] { 4f/5f, -32f, 32f,   1f,   42f,  25f,  -8f,   32f,  20f,   96f,-132f,  36f,   90f,-126f,  34f, 0f },   // settle
+            new[] { 1.00f, -32f, 32f,   0f,   42f,  25f,  -8f,   32f,  20f,   96f,-132f,  36f,   90f,-126f,  34f, 0f },   // held pose: arms hang in front of the knees (world 10 deg, forearm 35), sword low
+        };
+
+        private static RigPose Crouch(int t, int n, float k)
+        {
+            float u = n > 1 ? t / (float)(n - 1) : 0f;
+            int a = 0;
+            while (a < CrouchKeys.Length - 2 && u > CrouchKeys[a + 1][0]) a++;
+            float[] ka = CrouchKeys[a], kb = CrouchKeys[a + 1];
+            float f = Mathf.Clamp01((u - ka[0]) / (kb[0] - ka[0]));
+            f = f * f * (3f - 2f * f);   // ease in/out
+            float V(int i) => Mathf.Lerp(ka[i], kb[i], f);
+
+            var p = new RigPose();
+            p.SetDegrees(RigPart.Body, V(1) * k); p.SetDegrees(RigPart.Head, V(2) * k); p.SetDegrees(RigPart.Hair, V(3) * k);
+            p.SetDegrees(RigPart.ArmNearUpper, V(4) * k); p.SetDegrees(RigPart.ArmNearLower, V(5) * k); p.SetDegrees(RigPart.Weapon, V(6) * k);
+            p.SetDegrees(RigPart.ArmFarUpper, V(7) * k); p.SetDegrees(RigPart.ArmFarLower, V(8) * k);
+            p.SetDegrees(RigPart.LegNearUpper, V(9) * k); p.SetDegrees(RigPart.LegNearLower, V(10) * k); p.SetDegrees(RigPart.FootNear, V(11) * k);
+            p.SetDegrees(RigPart.LegFarUpper, V(12) * k); p.SetDegrees(RigPart.LegFarLower, V(13) * k); p.SetDegrees(RigPart.FootFar, V(14) * k);
+            p.hop = V(15) * k;
+            return p;
+        }
+
+        // ---- crouch walk (goose-step walk): the held crouch pose, with the legs taking turns (loop) ----
+        // Same posture as Crouch (hips near knee height, torso leaning 32 degrees with Head = -Body so the face is never re-sampled, arms hanging in front of the knees, sword low),
+        // the legs alternate: the foot that moves forward lifts (knee folds more), the other stays flat and pushes. Both thighs stay beyond 65 degrees, so the renderer fills the
+        // pelvis cells like in Crouch. The clip is in place (the game moves the character); the renderer pins the lowest foot to the ground line, so the hips bob by themselves.
+        private static RigPose CrouchWalk(int t, int n, float k)
+        {
+            float ph = 2f * Mathf.PI * t / n;
+            float s = Mathf.Sin(ph), c = Mathf.Cos(ph);
+            const float lean = 32f;
+
+            var p = new RigPose();
+            float thighN = 96f + 15f * s, thighF = 90f - 15f * s;
+            float shinN = -(132f + 26f * Mathf.Max(0f, c)), shinF = -(126f + 26f * Mathf.Max(0f, -c));
+            p.SetDegrees(RigPart.LegNearUpper, thighN * k); p.SetDegrees(RigPart.LegNearLower, shinN * k);
+            p.SetDegrees(RigPart.LegFarUpper, thighF * k); p.SetDegrees(RigPart.LegFarLower, shinF * k);
+            p.SetDegrees(RigPart.FootNear, -(thighN + shinN) * 0.92f * k);     // feet stay roughly flat, the lifted one tips its toe down a little
+            p.SetDegrees(RigPart.FootFar, -(thighF + shinF) * 0.92f * k);
+
+            p.SetDegrees(RigPart.Body, -lean * k); p.SetDegrees(RigPart.Head, lean * k);   // exact negatives: the head's net rotation is 0
+            p.SetDegrees(RigPart.Hair, -3f * k * Mathf.Cos(ph - 0.5f));
+            p.SetDegrees(RigPart.ArmNearUpper, (42f - 5f * s) * k); p.SetDegrees(RigPart.ArmNearLower, 25f * k);
+            p.SetDegrees(RigPart.ArmFarUpper, (32f + 5f * s) * k); p.SetDegrees(RigPart.ArmFarLower, 20f * k);
+            p.SetDegrees(RigPart.Weapon, (-8f + 2.5f * s) * k);
             return p;
         }
     }

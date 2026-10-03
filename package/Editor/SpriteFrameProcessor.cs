@@ -504,7 +504,7 @@ namespace AISpriteAnimation
             finally { UnityEngine.Object.DestroyImmediate(tex); }
         }
 
-        private static byte[] EncodePng(Color32[] px, int w, int h)
+        internal static byte[] EncodePng(Color32[] px, int w, int h)
         {
             var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
             try

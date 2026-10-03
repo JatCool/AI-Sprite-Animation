@@ -19,6 +19,7 @@ namespace AISpriteAnimation
         public const int MaxFrames = 24;
         public const string BundledWorkflowName = "AnimateDiffSprite";
         public const int BundledWorkflowVersion = 3;
+        public const string SdposeModel = "__SDPOSE_MODEL__";
         public const string Prompt = "__PROMPT__";
         public const string NegativePrompt = "__NEGATIVE_PROMPT__";
         public const string FrameCount = "__FRAME_COUNT__";
@@ -56,11 +57,12 @@ namespace AISpriteAnimation
             public static Value Num(long l) => new Value(l.ToString(CultureInfo.InvariantCulture), true);
         }
 
-        public static string Build(string template, IDictionary<string, Value> values)
+        /// <param name="requireInputImage">The AI Redraw workflow must use the source sprite; the SDPose motion workflow has no input image.</param>
+        public static string Build(string template, IDictionary<string, Value> values, bool requireInputImage = true)
         {
             if (string.IsNullOrWhiteSpace(template))
                 throw new ComfyUIException("The workflow JSON is empty. Assign a workflow in the AI Animation settings asset.");
-            if (!template.Contains(InputImage))
+            if (requireInputImage && !template.Contains(InputImage))
                 throw new ComfyUIException($"The workflow has no {InputImage} placeholder, so the source sprite would never be used.");
 
             var unknown = new HashSet<string>();

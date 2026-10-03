@@ -15,7 +15,7 @@ namespace AISpriteAnimation
         private const int Upscale = 4;   // sub-pixels per source pixel while composing; reduced to one pixel by majority vote
 
         // Bone hierarchy. -1 = attached to the root (which only translates). Parents always come before their children in RigPart order.
-        private static readonly int[] Parent =
+        internal static readonly int[] Parent =
         {
             -1,                                  // Body
             (int)RigPart.Body,                   // Head
@@ -34,7 +34,7 @@ namespace AISpriteAnimation
         };
 
         // The joint each part rotates about.
-        private static readonly RigJoint[] Pivot =
+        internal static readonly RigJoint[] Pivot =
         {
             RigJoint.Hip, RigJoint.Neck, RigJoint.HairPivot,
             RigJoint.ShoulderNear, RigJoint.ElbowNear, RigJoint.WeaponPivot,
@@ -53,11 +53,16 @@ namespace AISpriteAnimation
             RigPart.ArmNearUpper, RigPart.ArmNearLower, RigPart.Weapon,
         };
 
-        private static readonly RigPart[] GroundParts = { RigPart.LegNearUpper, RigPart.LegNearLower, RigPart.FootNear, RigPart.LegFarUpper, RigPart.LegFarLower, RigPart.FootFar };
+        internal static readonly RigPart[] GroundParts = { RigPart.LegNearUpper, RigPart.LegNearLower, RigPart.FootNear, RigPart.LegFarUpper, RigPart.LegFarLower, RigPart.FootFar };
         private static readonly RigPart[] OverlayParts = { RigPart.ArmNearUpper, RigPart.ArmNearLower, RigPart.ArmFarUpper, RigPart.ArmFarLower };
 
+        // A thigh swung far forward (a deep crouch) leaves the pelvis/skirt area behind the hip empty, which shows as a notch under the torso. Beyond this angle the vacated
+        // thigh cells are filled like a vacated arm (only then, so walking, running, attacking and the jump crouch render exactly as before).
+        private static readonly RigPart[] ThighParts = { RigPart.LegNearUpper, RigPart.LegFarUpper };
+        private const float DeepThighRadians = 65f * Mathf.Deg2Rad;
+
         // 2D affine transform: x' = a*x + b*y + tx ; y' = c*x + d*y + ty
-        private struct Affine
+        internal struct Affine
         {
             public float a, b, c, d, tx, ty;
             public static Affine Identity => new Affine { a = 1, d = 1 };
@@ -175,7 +180,9 @@ namespace AISpriteAnimation
                 }
 
                 Color32[] grid = Downsample(hiColor, hiOwner, hi, cells, out byte[] owner);
-                FillVacatedBody(grid, owner, cells, pixels, m[(int)RigPart.Body], sw, placeLeft, placeTop);
+                FillVacatedBody(grid, owner, cells, pixels, m[(int)RigPart.Body], sw, placeLeft, placeTop, OverlayParts);
+                if (Mathf.Abs(pose.angle[(int)RigPart.LegNearUpper]) > DeepThighRadians || Mathf.Abs(pose.angle[(int)RigPart.LegFarUpper]) > DeepThighRadians)
+                    FillVacatedBody(grid, owner, cells, pixels, m[(int)RigPart.Body], sw, placeLeft, placeTop, ThighParts);
                 CloseHoles(grid, cells);
 
                 // y-down -> bottom-left origin, undoing the mirror for left-facing sprites.
@@ -254,10 +261,10 @@ namespace AISpriteAnimation
 
         // An arm drawn in front of the torso leaves a hole in the torso when it swings away. Fill those cells with the colour of the
         // nearest body cells (the colour that was around the arm), so the torso stays solid. Only cells where a moved arm used to be are touched.
-        private static void FillVacatedBody(Color32[] grid, byte[] owner, int cells, List<int>[] pixels, Affine bodyMatrix, int sw, int placeLeft, int placeTop)
+        private static void FillVacatedBody(Color32[] grid, byte[] owner, int cells, List<int>[] pixels, Affine bodyMatrix, int sw, int placeLeft, int placeTop, RigPart[] parts)
         {
             var holes = new List<int>();
-            foreach (RigPart part in OverlayParts)
+            foreach (RigPart part in parts)
                 foreach (int idx in pixels[(int)part])
                 {
                     Vector2 q = bodyMatrix.Apply((idx % sw) + 0.5f, (idx / sw) + 0.5f);

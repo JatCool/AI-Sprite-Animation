@@ -23,6 +23,9 @@ namespace AISpriteAnimation
         [SerializeField] private bool showParts = true;
         [SerializeField] private int animIndex = 1;
         [SerializeField] private Vector2 scroll;
+        [SerializeField] private AIPoseAsset poseAsset;
+        [SerializeField] private bool previewAIPoses;
+        [SerializeField] private bool showBones = true;
 
         private SourceSprite source;
         private SpriteRigAsset rig;
@@ -43,6 +46,12 @@ namespace AISpriteAnimation
         private Texture2D previewTex;
         private bool previewDirty = true;
         private int previewCells;
+
+        // AI pose preview (original sprite beside the animated rig, driven by a saved AIPoseAsset)
+        private PosePreviewPlayer posePlayer;
+        private Texture2D poseTex, originalTex;
+        private bool poseDirty = true;
+        private string poseMessage = "";
 
         private static readonly Color[] PartColors =
         {
@@ -77,6 +86,18 @@ namespace AISpriteAnimation
         [MenuItem("Tools/AI Sprite Animation/Sprite Rig Editor")]
         private static void OpenFromMenu() => Open(Selection.activeObject);
 
+        /// <summary>Opens the rig editor in AI pose preview mode: the saved poses are played on the original sprite before an AnimationClip is built.</summary>
+        public static void OpenPosePreview(UnityEngine.Object sprite, AIPoseAsset asset)
+        {
+            var w = GetWindow<SpriteRigEditorWindow>("Sprite Rig Editor");
+            w.minSize = new Vector2(760, 520);
+            if (sprite != null && SourceSprite.IsValidSelection(sprite)) w.SetSource(sprite);
+            w.poseAsset = asset;
+            w.previewAIPoses = true;
+            w.poseDirty = true;
+            w.Show();
+        }
+
         public static void Open(UnityEngine.Object sprite)
         {
             var w = GetWindow<SpriteRigEditorWindow>("Sprite Rig Editor");
@@ -99,12 +120,14 @@ namespace AISpriteAnimation
             if (spriteTex != null) DestroyImmediate(spriteTex);
             if (overlayTex != null) DestroyImmediate(overlayTex);
             if (previewTex != null) DestroyImmediate(previewTex);
+            if (poseTex != null) DestroyImmediate(poseTex);
+            if (originalTex != null) DestroyImmediate(originalTex);
         }
 
         private void OnUndo()
         {
             rig?.definition.Invalidate();
-            overlayDirty = previewDirty = true;
+            overlayDirty = previewDirty = poseDirty = true;
             Repaint();
         }
 
@@ -191,7 +214,7 @@ namespace AISpriteAnimation
                 scroll = EditorGUILayout.BeginScrollView(scroll, GUILayout.ExpandWidth(true));
                 DrawCanvas();
                 EditorGUILayout.EndScrollView();
-                using (new EditorGUILayout.VerticalScope(GUILayout.Width(260)))
+                using (new EditorGUILayout.VerticalScope(GUILayout.Width(previewAIPoses ? 500 : 260)))
                 {
                     DrawPartPicker();
                     GUILayout.Space(8);
@@ -238,7 +261,7 @@ namespace AISpriteAnimation
         private void Commit(string msg)
         {
             rig.Commit();
-            overlayDirty = previewDirty = true;
+            overlayDirty = previewDirty = poseDirty = true;
             message = msg;
             Repaint();
         }
@@ -407,6 +430,9 @@ namespace AISpriteAnimation
         private void DrawPreview(AIAnimationSettings settings)
         {
             EditorGUILayout.LabelField("Preview", EditorStyles.boldLabel);
+            int sourceKind = GUILayout.Toolbar(previewAIPoses ? 1 : 0, new[] { "Procedural preset", "AI poses" });
+            if ((sourceKind == 1) != previewAIPoses) { previewAIPoses = sourceKind == 1; poseDirty = previewDirty = true; }
+            if (previewAIPoses) { DrawPosePreview(settings); return; }
             string[] names = settings.PresetNames();
             if (names.Length == 0) return;
             animIndex = Mathf.Clamp(animIndex, 0, names.Length - 1);
@@ -452,8 +478,105 @@ namespace AISpriteAnimation
             previewTex.Apply(false);
         }
 
+        // ---------------------------------------------------------------- AI pose preview
+
+        private void DrawPosePreview(AIAnimationSettings settings)
+        {
+            EditorGUI.BeginChangeCheck();
+            poseAsset = (AIPoseAsset)EditorGUILayout.ObjectField("Pose asset", poseAsset, typeof(AIPoseAsset), false);
+            if (EditorGUI.EndChangeCheck()) poseDirty = true;
+            if (poseAsset == null)
+            {
+                EditorGUILayout.HelpBox("Pick a saved AI pose asset (<Sprite>_<Animation>_AIPose.asset), or generate one in the AI Sprite Animation window (Animation Method: AI Pose + Rig > Generate Poses).", MessageType.Info);
+                return;
+            }
+            if (poseDirty) BuildPosePreview(settings);
+            if (posePlayer == null) { EditorGUILayout.HelpBox(poseMessage, MessageType.Warning); return; }
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("|<", GUILayout.Width(36))) { posePlayer.Playing = false; posePlayer.Step(-1); ShowPoseFrame(); }
+                if (GUILayout.Button(posePlayer.Playing ? "Pause" : "Play", GUILayout.Width(60))) posePlayer.Playing = !posePlayer.Playing;
+                if (GUILayout.Button(">|", GUILayout.Width(36))) { posePlayer.Playing = false; posePlayer.Step(1); ShowPoseFrame(); }
+                GUILayout.Space(8);
+                GUILayout.Label(posePlayer.Label, EditorStyles.boldLabel);
+                GUILayout.FlexibleSpace();
+                showBones = GUILayout.Toggle(showBones, "Show bones", "Button", GUILayout.Width(90));
+            }
+            EditorGUI.BeginChangeCheck();
+            int idx = EditorGUILayout.IntSlider(posePlayer.Index + 1, 1, posePlayer.FrameCount) - 1;
+            if (EditorGUI.EndChangeCheck()) { posePlayer.Playing = false; posePlayer.Seek(idx); ShowPoseFrame(); }
+
+            int z = Mathf.Max(2, Mathf.FloorToInt(230f / posePlayer.Cells));
+            float size = posePlayer.Cells * z;
+            var r = GUILayoutUtility.GetRect(size * 2 + 10, size, GUILayout.ExpandWidth(false));
+            var left = new Rect(r.x, r.y, size, size);
+            var right = new Rect(r.x + size + 10, r.y, size, size);
+            EditorGUI.DrawRect(left, new Color(0.3f, 0.38f, 0.3f));
+            EditorGUI.DrawRect(right, new Color(0.3f, 0.38f, 0.3f));
+            GUI.DrawTexture(left, originalTex, ScaleMode.StretchToFill, true);
+            GUI.DrawTexture(right, poseTex, ScaleMode.StretchToFill, true);
+            GUI.Label(new Rect(left.x + 2, left.y + 2, 120, 16), "Original sprite", EditorStyles.miniBoldLabel);
+            GUI.Label(new Rect(right.x + 2, right.y + 2, 160, 16), $"AI pose: {poseAsset.animation}", EditorStyles.miniBoldLabel);
+            if (showBones)
+            {
+                Handles.BeginGUI();
+                Handles.color = new Color(1f, 1f, 1f, 0.9f);
+                var joints = posePlayer.Joints[posePlayer.Index];
+                for (int b = 0; b < PosePreviewPlayer.Bones.GetLength(0); b++)
+                {
+                    Vector2 a = joints[PosePreviewPlayer.Bones[b, 0]], c = joints[PosePreviewPlayer.Bones[b, 1]];
+                    Handles.DrawLine(new Vector3(right.x + a.x * z, right.y + a.y * z), new Vector3(right.x + c.x * z, right.y + c.y * z));
+                }
+                Handles.color = new Color(0.2f, 0.9f, 1f);
+                foreach (var jp in joints) Handles.DrawSolidDisc(new Vector3(right.x + jp.x * z, right.y + jp.y * z), Vector3.forward, 2f);
+                Handles.EndGUI();
+            }
+
+            EditorGUILayout.LabelField($"{poseAsset.FrameCount} frames, {poseAsset.fps} FPS, {(poseAsset.loop ? "loop" : "one-shot")}; every pixel above comes from the original sprite", EditorStyles.miniLabel);
+            EditorGUILayout.HelpBox(poseAsset.MotionLabel + (string.IsNullOrEmpty(poseAsset.contributionSummary) ? "" : " - " + poseAsset.contributionSummary),
+                poseAsset.isAiMotion ? MessageType.Info : MessageType.Warning);
+            if (!string.IsNullOrEmpty(poseMessage)) EditorGUILayout.HelpBox(poseMessage, MessageType.None);
+        }
+
+        private void BuildPosePreview(AIAnimationSettings settings)
+        {
+            poseDirty = false;
+            posePlayer = null;
+            try
+            {
+                var provider = new AIPoseProvider(poseAsset, rig.definition, settings.poseCleanup);
+                RigPose[] poses = provider.GetPoses(poseAsset.animation, poseAsset.FrameCount, poseAsset.FrameCount, 1f);
+                posePlayer = PosePreviewPlayer.Build(rig.definition, pixels, poses, poseAsset.fps, settings.facing == SpriteFacing.Left);
+                poseMessage = provider.LastReport.ToString();
+                if (poseTex == null || poseTex.width != posePlayer.Cells)
+                {
+                    if (poseTex != null) DestroyImmediate(poseTex);
+                    if (originalTex != null) DestroyImmediate(originalTex);
+                    poseTex = new Texture2D(posePlayer.Cells, posePlayer.Cells, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.HideAndDontSave };
+                    originalTex = new Texture2D(posePlayer.Cells, posePlayer.Cells, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.HideAndDontSave };
+                }
+                originalTex.SetPixels32(posePlayer.Original);
+                originalTex.Apply(false);
+                ShowPoseFrame();
+            }
+            catch (PoseRejectedException ex) { poseMessage = "These poses are rejected by validation:\n" + ex.Report; }
+            catch (Exception ex) { poseMessage = "Pose preview failed: " + ex.Message; }
+        }
+
+        private void ShowPoseFrame()
+        {
+            poseTex.SetPixels32(posePlayer.Frames[posePlayer.Index]);
+            poseTex.Apply(false);
+        }
+
         private void Tick()
         {
+            if (previewAIPoses)
+            {
+                if (posePlayer != null && poseTex != null && posePlayer.Tick(EditorApplication.timeSinceStartup)) { ShowPoseFrame(); Repaint(); }
+                return;
+            }
             if (!playing || previewFrames == null || previewTex == null || rig == null) return;
             double now = EditorApplication.timeSinceStartup;
             var settings = AIAnimationSettings.GetOrCreate();

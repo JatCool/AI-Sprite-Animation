@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Compiles the pure-math pose layers of the package against UnityEngine.CoreModule and tests them without opening Unity. -->
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>disable</Nullable></PropertyGroup>
+  <ItemGroup>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>C:\Program Files\Unity\Hub\Editor\6000.6.0f1\Editor\Data\Managed\UnityEngine\UnityEngine.CoreModule.dll</HintPath></Reference>
+    <Compile Include="..\..\package\Editor\RigDefinition.cs" />
+    <Compile Include="..\..\package\Editor\RigAutoBuilder.cs" />
+    <Compile Include="..\..\package\Editor\RigAnimator.cs" />
+    <Compile Include="..\..\package\Editor\SpriteRig.cs" />
+    <Compile Include="..\..\package\Editor\RigKinematics.cs" />
+    <Compile Include="..\..\package\Editor\MiniJson.cs" />
+    <Compile Include="..\..\package\Editor\PoseChannels.cs" />
+    <Compile Include="..\..\package\Editor\PoseMetrics.cs" />
+    <Compile Include="..\..\package\Editor\TurnThroughFront.cs" />
+    <Compile Include="..\..\package\Editor\PoseConstraints.cs" />
+    <Compile Include="..\..\package\Editor\PoseCleanupSettings.cs" />
+    <Compile Include="..\..\package\Editor\PoseReport.cs" />
+    <Compile Include="..\..\package\Editor\PoseValidator.cs" />
+    <Compile Include="..\..\package\Editor\PoseSmoother.cs" />
+    <Compile Include="..\..\package\Editor\PoseCleanup.cs" />
+    <Compile Include="..\..\package\Editor\OpenPoseKeypoints.cs" />
+    <Compile Include="..\..\package\Editor\OpenPoseMapper.cs" />
+    <Compile Include="..\..\package\Editor\OpenPoseTracking.cs" />
+    <Compile Include="..\..\package\Editor\MotionCycleExtractor.cs" />
+    <Compile Include="..\..\package\Editor\PoseContribution.cs" />
+    <Compile Include="..\..\package\Editor\SDPoseAnalysis.cs" />
+    <Compile Include="..\..\package\Editor\RigPoseFitter.cs" Condition="Exists('..\..\package\Editor\RigPoseFitter.cs')" />
+  </ItemGroup>
+</Project>

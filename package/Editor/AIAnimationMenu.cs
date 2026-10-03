@@ -13,11 +13,21 @@ namespace AISpriteAnimation
         [MenuItem("Assets/AI/Generate Animation/Walk", false, 2001)] private static void Walk() => RunPreset("Walk");
         [MenuItem("Assets/AI/Generate Animation/Run", false, 2002)] private static void Run() => RunPreset("Run");
         [MenuItem("Assets/AI/Generate Animation/Attack", false, 2003)] private static void Attack() => RunPreset("Attack");
+        [MenuItem("Assets/AI/Generate Animation/Rotate", false, 2004)] private static void Rotate() => RunPreset("Rotate");
+        [MenuItem("Assets/AI/Generate Animation/Jump", false, 2005)] private static void Jump() => RunPreset("Jump");
+        [MenuItem("Assets/AI/Generate Animation/Sit", false, 2006)] private static void Sit() => RunPreset("Sit");
+        [MenuItem("Assets/AI/Generate Animation/Crouch", false, 2007)] private static void Crouch() => RunPreset("Crouch");
+        [MenuItem("Assets/AI/Generate Animation/CrouchWalk", false, 2008)] private static void CrouchWalk() => RunPreset("CrouchWalk");
 
         [MenuItem("Assets/AI/Generate Animation/Idle", true)]
         [MenuItem("Assets/AI/Generate Animation/Walk", true)]
         [MenuItem("Assets/AI/Generate Animation/Run", true)]
         [MenuItem("Assets/AI/Generate Animation/Attack", true)]
+        [MenuItem("Assets/AI/Generate Animation/Rotate", true)]
+        [MenuItem("Assets/AI/Generate Animation/Jump", true)]
+        [MenuItem("Assets/AI/Generate Animation/Sit", true)]
+        [MenuItem("Assets/AI/Generate Animation/Crouch", true)]
+        [MenuItem("Assets/AI/Generate Animation/CrouchWalk", true)]
         private static bool ValidateSelection() => !AIAnimationGenerator.IsRunning && SourceSprite.IsValidSelection(Selection.activeObject);
 
         [MenuItem("Tools/AI Sprite Animation/Generate Animation")]
@@ -60,6 +70,7 @@ namespace AISpriteAnimation
                 Frames = preset.frames,
                 Fps = preset.fps,
                 Loop = preset.loop,
+                PoseSource = PoseSource.GenerateIfMissing,
             });
         }
 

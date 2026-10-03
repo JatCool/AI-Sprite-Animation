@@ -1,0 +1,17 @@
+Neck 26 18.5
+HairPivot 20.5 5.5
+Hip 26 32
+ShoulderNear 28.5 21
+ElbowNear 30 27
+HandNear 31.5 33
+ShoulderFar 23.5 21
+ElbowFar 22.5 25.5
+HandFar 22.5 29.5
+KneeNear 27.5 39
+FootNear 27 45
+KneeFar 24.5 39
+FootFar 24.5 45
+WeaponPivot 32.5 33.2
+WeaponTip 40.5 35.7
+ground 47
+remap Body LegNearUpper 17 32 19 38

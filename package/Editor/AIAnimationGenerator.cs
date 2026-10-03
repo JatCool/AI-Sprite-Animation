@@ -10,6 +10,17 @@ using Object = UnityEngine.Object;
 
 namespace AISpriteAnimation
 {
+    /// <summary>AI Pose + Rig: where the poses of a build come from.</summary>
+    public enum PoseSource
+    {
+        /// <summary>Use the saved pose asset only. Never starts ComfyUI; fails if there is none.</summary>
+        Saved,
+        /// <summary>Use the saved pose asset, or run the AI once if there is none yet.</summary>
+        GenerateIfMissing,
+        /// <summary>Run the AI again and replace the saved poses, then build.</summary>
+        Regenerate,
+    }
+
     public sealed class GenerationOptions
     {
         public Object Source;
@@ -23,6 +34,8 @@ namespace AISpriteAnimation
         public AnimatorController Controller;        // optional
         /// <summary>Create a rig automatically when the sprite has none (otherwise the user is asked; batch mode always auto-creates).</summary>
         public bool AutoCreateRig;
+        /// <summary>AI Pose + Rig only: use saved poses (default), generate them when missing, or regenerate.</summary>
+        public PoseSource PoseSource = PoseSource.Saved;
 
         /// <summary>Use these settings instead of the project's settings asset (in-memory only; used by the self-test and batch overrides).</summary>
         public AIAnimationSettings SettingsOverride;
@@ -36,6 +49,11 @@ namespace AISpriteAnimation
         public string Folder;
         public int FrameWidth, FrameHeight, FrameCount;
         public double GenerationSeconds;
+        /// <summary>AI Pose + Rig: the pose asset the animation was built from, how the poses were obtained, and what validation did.</summary>
+        public AIPoseAsset PoseAsset;
+        public bool PosesGeneratedNow;
+        public PoseReport PoseReport;
+        public double PoseGenerationSeconds, BuildSeconds;
     }
 
     /// <summary>
@@ -46,6 +64,8 @@ namespace AISpriteAnimation
     public static class AIAnimationGenerator
     {
         public static bool IsRunning { get; private set; }
+
+        internal static void SetRunning(bool running) => IsRunning = running;
 
         public static async Task<GenerationOutcome> GenerateAsync(GenerationOptions options, Action<string, float> progress, CancellationToken ct,
             IAIAnimationBackend backendOverride = null)
@@ -65,6 +85,13 @@ namespace AISpriteAnimation
             if (options.Frames < 2 || options.Frames > ComfyWorkflowBuilder.MaxFrames) return Fail($"Frame count must be between 2 and {ComfyWorkflowBuilder.MaxFrames} (the bundled workflow has {ComfyWorkflowBuilder.MaxFrames} pose slots).");
             if (options.Fps < 1) return Fail("FPS must be at least 1.");
             if (settings.generationSize % 8 != 0 || settings.generationSize < 256) return Fail("Generation size must be a multiple of 8 and at least 256.");
+
+            if (preset.turnThroughFront && settings.mode != AnimationMode.Rig)
+                return Fail($"'{preset.name}' turns the character through its front view using the character's own side and front sprites (pixel-exact) and is a Rig animation: set the Animation Method to Rig.");
+            if ((string.Equals(preset.poseKind, "jump", StringComparison.OrdinalIgnoreCase) || string.Equals(preset.poseKind, "sit", StringComparison.OrdinalIgnoreCase) || string.Equals(preset.poseKind, "crouch", StringComparison.OrdinalIgnoreCase) || string.Equals(preset.poseKind, "crouchwalk", StringComparison.OrdinalIgnoreCase)) && settings.mode != AnimationMode.Rig)
+                return Fail($"'{preset.name}' is a Rig animation (the AI methods have no {preset.poseKind} skeleton or motion prompt): set the Animation Method to Rig.");
+            Color32[] frontPixels = null; int frontW = 0, frontH = 0;
+            if (preset.turnThroughFront && !FrontSprite.TryLoad(source, settings, out frontPixels, out frontW, out frontH, out string frontError)) return Fail(frontError);
 
             // Rig mode needs a rig for this sprite. AIRedraw only needs a silhouette guide, which is built in memory.
             bool useAI = settings.mode == AnimationMode.AIRedraw;
@@ -93,6 +120,30 @@ namespace AISpriteAnimation
                 }
             }
 
+            // AI Pose + Rig: the motion comes from saved AI poses. The AI is only started when asked for (or when nothing is saved yet and the caller allows it).
+            AIPoseAsset poseAsset = null;
+            bool posesGeneratedNow = false;
+            double poseSeconds = 0;
+            if (settings.mode == AnimationMode.AIPoseRig)
+            {
+                poseAsset = AIPoseAsset.FindFor(source, settings, preset.name);
+                if (options.PoseSource == PoseSource.Regenerate || (poseAsset == null && options.PoseSource == PoseSource.GenerateIfMissing))
+                {
+                    var poseOutcome = await AIPoseGenerator.GenerateAsync(new PoseGenerationOptions
+                    {
+                        Source = options.Source, PresetName = preset.name, Frames = options.Frames, Fps = options.Fps, Loop = options.Loop,
+                        ExtraPrompt = options.ExtraPrompt, ExtraNegativePrompt = options.ExtraNegativePrompt, Seed = options.Seed,
+                        AutoCreateRig = options.AutoCreateRig, SettingsOverride = options.SettingsOverride,
+                    }, progress, ct);
+                    if (!poseOutcome.Success) return new GenerationOutcome { Error = poseOutcome.Error, Cancelled = poseOutcome.Cancelled, PoseReport = poseOutcome.Report };
+                    poseAsset = poseOutcome.Asset;
+                    posesGeneratedNow = true;
+                    poseSeconds = poseOutcome.GenerationSeconds;
+                }
+                if (poseAsset == null)
+                    return Fail($"There are no saved AI poses for '{source.Name}' / {preset.name}. Click \"Generate Poses\" first (this is the only step that needs ComfyUI).");
+            }
+
             IsRunning = true;
             EditorApplication.LockReloadAssemblies(); // a script reload mid-run would abort the run and kill ComfyUI
             IAIAnimationBackend backend = useAI ? (backendOverride ?? new ComfyUIAnimationBackend(settings)) : null;
@@ -109,9 +160,26 @@ namespace AISpriteAnimation
 
                 // The posed source sprite: the final frames in Rig mode, and the source-derived silhouette that masks the AI frames in AIRedraw mode.
                 progress?.Invoke("Posing the sprite...", 0.05f);
-                RigPose[] rigPoses = ProceduralRigPoses.Instance.GetPoses(preset.poseKind, options.Frames, options.Frames, preset.rigIntensity);
+                IRigPoseProvider poseProvider = poseAsset != null
+                    ? new AIPoseProvider(poseAsset, rigAsset.definition, settings.poseCleanup)
+                    : (IRigPoseProvider)ProceduralRigPoses.Instance;
+                RigPose[] rigPoses = poseProvider.GetPoses(preset.poseKind, options.Frames, options.Frames, preset.rigIntensity);
+                if (poseProvider is AIPoseProvider aiProvider)
+                {
+                    outcome.PoseReport = aiProvider.LastReport;
+                    outcome.PoseAsset = poseAsset;
+                    outcome.PosesGeneratedNow = posesGeneratedNow;
+                    outcome.PoseGenerationSeconds = poseSeconds;
+                }
                 var rigFrames = SpriteRig.Render(rigAsset.definition, input.SpritePixels, rigPoses, input.Cells, input.LeftCells, input.BottomCells,
                     settings.facing == SpriteFacing.Left);
+                // Rotate: side view -> front view (held) -> the needed side. The side sprite is rendered in its rest pose, the front view is the character's own art
+                // on the same grid and ground line; every pixel is one of the character's own.
+                if (preset.turnThroughFront)
+                {
+                    Color32[] frontGrid = TurnThroughFront.PlaceOnGrid(frontPixels, frontW, frontH, input.Cells, settings.facing == SpriteFacing.Left ? input.Cells - input.LeftCells - source.Rect.width : input.LeftCells, input.BottomCells, source.Rect.width);
+                    rigFrames = TurnThroughFront.Build(rigFrames[0], frontGrid, input.Cells, options.Fps, preset.frontHoldSeconds, preset.turnSquashFrames);
+                }
 
                 List<FrameBuffer> buffers;
                 if (!useAI)
@@ -184,6 +252,11 @@ namespace AISpriteAnimation
                 outcome.Cancelled = true;
                 outcome.Error = "Cancelled.";
             }
+            catch (PoseRejectedException e)
+            {
+                outcome.PoseReport = e.Report;
+                outcome.Error = e.Message + " Generate the poses again (another seed) or relax the pose clean-up settings.";
+            }
             catch (Exception e)
             {
                 outcome.Error = e is ComfyUIException ? e.Message : $"{e.GetType().Name}: {e.Message}";
@@ -198,6 +271,7 @@ namespace AISpriteAnimation
                 EditorApplication.UnlockReloadAssemblies();
                 IsRunning = false;
                 outcome.GenerationSeconds = clock.Elapsed.TotalSeconds;
+                outcome.BuildSeconds = outcome.GenerationSeconds;
             }
 
             if (outcome.Success) progress?.Invoke("Done.", 1f);

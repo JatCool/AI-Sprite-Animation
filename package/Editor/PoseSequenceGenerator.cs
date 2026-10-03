@@ -52,6 +52,18 @@ namespace AISpriteAnimation
             return result;
         }
 
+        /// <summary>
+        /// Draws one ready-made OpenPose skeleton (keypoints in canvas pixels, y down) as a ControlNet image. Used by AI Pose + Rig,
+        /// whose sketch skeleton comes from the character's own rig instead of the generic <see cref="SkeletonPoses"/>.
+        /// </summary>
+        public static byte[] EncodeSkeleton(int width, int height, Vector2[] keypoints)
+        {
+            var canvas = new Color32[width * height];
+            for (int p = 0; p < canvas.Length; p++) canvas[p] = new Color32(0, 0, 0, 255);
+            Render(canvas, width, height, keypoints);
+            return SpriteFrameProcessor.EncodePngTopDown(canvas, width, height);
+        }
+
         private static void Render(Color32[] buf, int w, int h, Vector2[] kp)
         {
             int radius = Mathf.Max(3, (int)(h * 0.014f));

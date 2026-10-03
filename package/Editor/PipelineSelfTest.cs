@@ -66,6 +66,10 @@ namespace AISpriteAnimation
                     // 5-8: tiny generation on a built-in sprite, verify frames and Unity import.
                     progress?.Invoke("Running a tiny generation...", 0.3f);
                     items.AddRange(await RunTinyGenerationAsync(settings, AnimationMode.AIRedraw, progress, ct));
+
+                    // AI Pose + Rig: generate poses once with the same running ComfyUI, then rebuild from the saved poses.
+                    progress?.Invoke("Running a tiny AI Pose + Rig generation...", 0.65f);
+                    items.AddRange(await RunTinyGenerationAsync(settings, AnimationMode.AIPoseRig, progress, ct));
                 }
                 catch (OperationCanceledException)
                 {
@@ -120,6 +124,18 @@ namespace AISpriteAnimation
             settings.mode = mode;
             var preset = settings.FindPreset("Walk") ?? settings.presets[0];
             preset.steps = 8;
+            if (mode == AnimationMode.AIPoseRig)
+            {
+                // The SDPose model is a separate 1.9 GB download: without it AI Pose + Rig cannot be tested (reported as a warning, never as a silent pass).
+                if (SDPoseModel.Status(settings) == SDPoseModelStatus.Missing)
+                {
+                    items.Add(new DiagnosticItem(G, DiagnosticStatus.Warning, "AI Pose + Rig was not tested: " + SDPoseModel.MissingMessage));
+                    DeleteTestAssets();
+                    return items;
+                }
+                settings.poseBackend = PoseBackend.SDPose;
+                settings.poseCandidates = 4;
+            }
 
             var outcome = await AIAnimationGenerator.GenerateAsync(new GenerationOptions
             {
@@ -131,6 +147,7 @@ namespace AISpriteAnimation
                 Seed = 1,
                 AutoCreateRig = true,
                 SettingsOverride = settings,
+                PoseSource = mode == AnimationMode.AIPoseRig ? PoseSource.GenerateIfMissing : PoseSource.Saved,
             }, progress, ct);
 
             if (!outcome.Success)
@@ -139,6 +156,23 @@ namespace AISpriteAnimation
                 return items;
             }
             items.Add(new DiagnosticItem(G, DiagnosticStatus.Ok, $"Generated {outcome.FrameCount} frames", $"{outcome.GenerationSeconds:0}s"));
+
+            if (mode == AnimationMode.AIPoseRig)
+            {
+                bool saved = outcome.PoseAsset != null && outcome.PosesGeneratedNow && outcome.PoseAsset.FrameCount == 4;
+                items.Add(new DiagnosticItem(G, saved ? DiagnosticStatus.Ok : DiagnosticStatus.Error, "AI poses generated, validated and saved as a pose asset",
+                    outcome.PoseAsset != null ? $"{AssetDatabase.GetAssetPath(outcome.PoseAsset)}, generation {outcome.PoseGenerationSeconds:0}s" : ""));
+
+                // Rebuild from the saved poses: must work without the AI.
+                var rebuilt = await AIAnimationGenerator.GenerateAsync(new GenerationOptions
+                {
+                    Source = AssetDatabase.LoadAssetAtPath<Texture2D>(spritePath), PresetName = preset.name, Frames = 4, Fps = 8, Loop = true,
+                    SettingsOverride = settings, PoseSource = PoseSource.Saved,
+                }, progress, ct);
+                bool again = rebuilt.Success && !rebuilt.PosesGeneratedNow && rebuilt.FrameCount == 4;
+                items.Add(new DiagnosticItem(G, again ? DiagnosticStatus.Ok : DiagnosticStatus.Error, "Rebuilt the animation from the saved poses (no AI run)",
+                    again ? $"{rebuilt.BuildSeconds:0.0}s" : rebuilt.Error));
+            }
 
             // Verify the Unity import: clip, sprites, size, transparency, distinct frames, consistent pivot.
             var clip = outcome.Clip;
