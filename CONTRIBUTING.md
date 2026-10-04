@@ -5,6 +5,15 @@ Thanks for helping. Issues and pull requests are welcome; contributions are acce
 **Read [`package/Documentation~/HANDOVER.md`](package/Documentation~/HANDOVER.md) first.** It explains the context, the decisions behind the design, the code map,
 the conventions (coordinates, angle signs, pixel-art rules), what to update and when, and how everything was tested.
 
+## How changes get in
+
+`main` is protected. Nobody pushes to it directly except the repository owner; everyone else contributes through a pull request:
+
+1. Fork the repository (or, with write access, create a branch) and make your change there.
+2. Open a pull request against `main`. The pull request template lists what to check.
+3. The owner reviews it (every change needs the owner's approval, see `.github/CODEOWNERS`). Discuss and update the branch as needed; stale approvals are dismissed when you push new commits, and all conversations must be resolved.
+4. After approval the pull request can be merged.
+
 ## Layout
 
 | Path | What |
