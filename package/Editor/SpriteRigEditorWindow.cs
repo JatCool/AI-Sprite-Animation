@@ -197,6 +197,13 @@ namespace AISpriteAnimation
             if (rig == null)
             {
                 EditorGUILayout.HelpBox($"'{source.Name}' has no rig yet. Create a starting rig from the sprite's shape, then drag the joints onto the character and paint the parts.", MessageType.Info);
+                if (ChargenRigImporter.FindRigJson(source) != null && GUILayout.Button(new GUIContent("Import Generated Rig Data", "Use the joints, part map, hidden pixels and leg swing scale that the character generator saved in rig/rig.json next to this sprite."), GUILayout.Height(28)))
+                {
+                    rig = ChargenRigImporter.TryImportFor(source, settings);
+                    if (rig != null) Selection.activeObject = rig;
+                    else message = "The generated rig data does not fit this sprite (see the Console).";
+                    overlayDirty = previewDirty = true;
+                }
                 if (GUILayout.Button("Create Rig (auto)", GUILayout.Height(28)))
                 {
                     rig = SpriteRigAsset.CreateAuto(source, settings);
@@ -459,7 +466,7 @@ namespace AISpriteAnimation
                 var preset = settings.presets[Mathf.Clamp(animIndex, 0, settings.presets.Count - 1)];
                 previewCells = Mathf.CeilToInt(Mathf.Max(sw, sh) * 1.6f);
                 int left = (previewCells - sw) / 2, bottom = (previewCells - sh) / 2;
-                var poses = ProceduralRigPoses.Instance.GetPoses(preset.poseKind, Mathf.Max(preset.frames, 8), Mathf.Max(preset.frames, 8), preset.rigIntensity);
+                var poses = SpriteRig.ApplyLegSwingScale(rig.definition, ProceduralRigPoses.Instance.GetPoses(preset.poseKind, Mathf.Max(preset.frames, 8), Mathf.Max(preset.frames, 8), preset.rigIntensity), preset.poseKind);
                 previewFrames = SpriteRig.Render(rig.definition, pixels, poses, previewCells, left, bottom, settings.facing == SpriteFacing.Left);
                 if (previewTex == null || previewTex.width != previewCells)
                 {
@@ -546,7 +553,7 @@ namespace AISpriteAnimation
             try
             {
                 var provider = new AIPoseProvider(poseAsset, rig.definition, settings.poseCleanup);
-                RigPose[] poses = provider.GetPoses(poseAsset.animation, poseAsset.FrameCount, poseAsset.FrameCount, 1f);
+                RigPose[] poses = SpriteRig.ApplyLegSwingScale(rig.definition, provider.GetPoses(poseAsset.animation, poseAsset.FrameCount, poseAsset.FrameCount, 1f), poseAsset.animation);
                 posePlayer = PosePreviewPlayer.Build(rig.definition, pixels, poses, poseAsset.fps, settings.facing == SpriteFacing.Left);
                 poseMessage = provider.LastReport.ToString();
                 if (poseTex == null || poseTex.width != posePlayer.Cells)

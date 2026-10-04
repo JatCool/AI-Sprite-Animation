@@ -74,7 +74,7 @@ namespace AISpriteAnimation
             if (options.Frames < 2 || options.Frames > ComfyWorkflowBuilder.MaxFrames) return Fail($"Frame count must be between 2 and {ComfyWorkflowBuilder.MaxFrames}.");
             if (options.Fps < 1) return Fail("FPS must be at least 1.");
 
-            SpriteRigAsset rigAsset = SpriteRigAsset.FindFor(source, settings);
+            SpriteRigAsset rigAsset = SpriteRigAsset.FindFor(source, settings) ?? ChargenRigImporter.TryImportFor(source, settings);
             if (rigAsset == null)
             {
                 if (options.AutoCreateRig || Application.isBatchMode)

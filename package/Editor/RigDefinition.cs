@@ -42,6 +42,13 @@ namespace AISpriteAnimation
         [SerializeField] private byte[] maskBytes = new byte[0];   // ushort per pixel, little endian; bit i = RigPart i; 0 = no part
         [NonSerialized] private ushort[] mask;
 
+        // Optional data from an external generator (see ChargenRigImporter). Both are absent on hand-made and auto-built rigs, and then
+        // rendering is exactly what it was before they existed.
+        [Tooltip("Optional: what the torso looks like behind the near arm / weapon (RGBA per pixel, y down, empty = none). Rendered as extra Body pixels under the arms, so a swinging arm reveals it.")]
+        [SerializeField] private byte[] underlayBytes = new byte[0];
+        [Tooltip("Scales the leg angles of every generated pose (1 = unchanged). Robed characters use about 0.3 so the robe stays one silhouette instead of scissoring. Values <= 0 count as 1.")]
+        public float legSwingScale = 1f;
+
         public RigDefinition() { }
 
         public RigDefinition(int width, int height)
@@ -98,9 +105,36 @@ namespace AISpriteAnimation
         public RigDefinition Clone()
         {
             Flush();
-            var c = new RigDefinition { width = width, height = height, groundY = groundY, joints = (Vector2[])joints.Clone() };
+            var c = new RigDefinition { width = width, height = height, groundY = groundY, joints = (Vector2[])joints.Clone(), legSwingScale = legSwingScale };
             c.maskBytes = (byte[])maskBytes.Clone();
+            c.underlayBytes = underlayBytes != null ? (byte[])underlayBytes.Clone() : new byte[0];
             return c;
+        }
+
+        /// <summary>The leg swing scale to apply: <see cref="legSwingScale"/>, or 1 when it is unset (0, from an older asset) or invalid.</summary>
+        public float EffectiveLegSwingScale => legSwingScale > 0f && !float.IsNaN(legSwingScale) && !float.IsInfinity(legSwingScale) ? legSwingScale : 1f;
+
+        /// <summary>True when the rig carries an underlay of the right size.</summary>
+        public bool HasUnderlay => underlayBytes != null && underlayBytes.Length == width * height * 4 && width * height > 0;
+
+        /// <summary>Underlay colour of pixel (x, y) (y down); transparent where there is none. Only valid when <see cref="HasUnderlay"/>.</summary>
+        public Color32 GetUnderlay(int x, int y)
+        {
+            int i = (y * width + x) * 4;
+            return new Color32(underlayBytes[i], underlayBytes[i + 1], underlayBytes[i + 2], underlayBytes[i + 3]);
+        }
+
+        /// <summary>Sets the underlay (width * height pixels, y down), or removes it when <paramref name="pixels"/> is null.</summary>
+        public void SetUnderlay(Color32[] pixels)
+        {
+            if (pixels == null) { underlayBytes = new byte[0]; return; }
+            if (pixels.Length != width * height) throw new ArgumentException("Underlay size does not match the rig.");
+            underlayBytes = new byte[pixels.Length * 4];
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                underlayBytes[i * 4] = pixels[i].r; underlayBytes[i * 4 + 1] = pixels[i].g;
+                underlayBytes[i * 4 + 2] = pixels[i].b; underlayBytes[i * 4 + 3] = pixels[i].a;
+            }
         }
 
         public bool IsValidFor(int w, int h) => width == w && height == h && joints != null && joints.Length == JointCount;

@@ -111,6 +111,23 @@ namespace AISpriteAnimation
                     src[y * sw + x] = sprite[(sh - 1 - y) * sw + sx];
                     mask[y * sw + x] = src[y * sw + x].a == 0 ? (ushort)0 : rig.GetMask(sx, y);
                 }
+            // Optional underlay (generated rig data): the torso as it looks behind the near arm / weapon. Those pixels also become Body pixels,
+            // with the underlay's colours, drawn beneath the arm; when the arm swings away they show instead of a hole. Without an underlay
+            // bodySrc is src and nothing changes.
+            Color32[] bodySrc = src;
+            if (rig.HasUnderlay)
+            {
+                bodySrc = (Color32[])src.Clone();
+                for (int y = 0; y < sh; y++)
+                    for (int x = 0; x < sw; x++)
+                    {
+                        int sx = facingLeft ? sw - 1 - x : x;
+                        Color32 u = rig.GetUnderlay(sx, y);
+                        if (u.a == 0 || src[y * sw + x].a == 0) continue;
+                        bodySrc[y * sw + x] = u;
+                        mask[y * sw + x] |= RigDefinition.Bit(RigPart.Body);
+                    }
+            }
             var pivot = new Vector2[RigDefinition.PartCount];
             for (int i = 0; i < pivot.Length; i++)
             {
@@ -176,7 +193,7 @@ namespace AISpriteAnimation
                 {
                     int pi = (int)part;
                     if (pixels[pi].Count == 0) continue;
-                    DrawPart(m[pi], pi, src, mask, sw, sh, minB[pi], maxB[pi], placeLeft, placeTop, hi, hiColor, hiOwner);
+                    DrawPart(m[pi], pi, part == RigPart.Body ? bodySrc : src, mask, sw, sh, minB[pi], maxB[pi], placeLeft, placeTop, hi, hiColor, hiOwner);
                 }
 
                 Color32[] grid = Downsample(hiColor, hiOwner, hi, cells, out byte[] owner);
@@ -193,6 +210,43 @@ namespace AISpriteAnimation
                 result.Add(outFrame);
             }
             return result;
+        }
+
+        /// <summary>Share of the torso lean a reduced-leg-swing (robed) rig keeps in Run: the full 11 degrees swing a robe's hem back off the
+        /// front foot (the whole Body, robe included, rotates about the hip), so such rigs lean about 5.5 degrees.</summary>
+        public const float ReducedSwingRunLeanScale = 0.5f;
+
+        // Parts hanging from the Body: when the torso leans less they are counter-rotated, so their world angles (the face, the arm swing) stay as posed.
+        private static readonly RigPart[] BodyChildren = { RigPart.Head, RigPart.ArmNearUpper, RigPart.ArmFarUpper };
+
+        /// <summary>
+        /// Applies the rig's <see cref="RigDefinition.legSwingScale"/> to generated poses: every leg angle (thighs, shins, feet) is multiplied
+        /// by it, so a robed character's robe moves as one silhouette instead of scissoring. For <paramref name="animation"/> "run" such a rig
+        /// also leans its torso less (<see cref="ReducedSwingRunLeanScale"/>), with head and upper arms counter-rotated so only the torso and
+        /// robe change. Returns <paramref name="poses"/> itself when the scale is 1 (every hand-made or auto-built rig), otherwise scaled copies;
+        /// the input poses are never modified. Applied to the poses before <see cref="Render"/>, not inside it, so pose fitting and kinematics
+        /// see the angles they set.
+        /// </summary>
+        public static RigPose[] ApplyLegSwingScale(RigDefinition rig, RigPose[] poses, string animation = null)
+        {
+            float k = rig != null ? rig.EffectiveLegSwingScale : 1f;
+            if (k == 1f || poses == null) return poses;
+            bool run = string.Equals(animation, "run", StringComparison.OrdinalIgnoreCase);
+            var scaled = new RigPose[poses.Length];
+            for (int i = 0; i < poses.Length; i++)
+            {
+                var p = new RigPose { root = poses[i].root, hop = poses[i].hop };
+                Array.Copy(poses[i].angle, p.angle, p.angle.Length);
+                foreach (RigPart leg in GroundParts) p[leg] *= k;
+                if (run)
+                {
+                    float removed = p[RigPart.Body] * (1f - ReducedSwingRunLeanScale);
+                    p[RigPart.Body] -= removed;
+                    foreach (RigPart child in BodyChildren) p[child] += removed;
+                }
+                scaled[i] = p;
+            }
+            return scaled;
         }
 
         // Inverse mapping: every destination sub-pixel looks up the source pixel it came from, so rotated parts have no holes.

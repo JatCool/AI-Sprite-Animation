@@ -69,12 +69,13 @@ import as sprites (PPU/filter from source or from settings) -> `AnimationClip` -
 | `AIAnimationSettings.cs` | Project settings asset (`ScriptableObject`), presets, enums. Created on first use at `Assets/AISpriteAnimation/`. |
 | `AIAnimationWindow.cs`, `AIAnimationMenu.cs` | Main window (method, presets, ComfyUI settings, Diagnostics, Test Connection, Test Full Pipeline) and menu entries. |
 | **Rig** | |
-| `RigDefinition.cs` | Pure data: `RigPart` (14 parts), `RigJoint` (15 joints), per-pixel part bit mask, ground line. |
+| `RigDefinition.cs` | Pure data: `RigPart` (14 parts), `RigJoint` (15 joints), per-pixel part bit mask, ground line; optional underlay and `legSwingScale` (1.7.0). |
+| `ChargenRigImporter.cs` | (1.7.0) Reads generated rig data (`rig/rig.json`, `chargen-rig/1`: joints, ground, `parts.png`, `underlay.png`, leg swing scale) into the sprite's rig asset; menu *AI > Import Generated Rig Data*. Self-contained; the rest of the package only calls `TryImportFor` where a rig is missing. |
 | `SpriteRigAsset.cs` | `ScriptableObject` wrapper; find/create the rig for a sprite (`<Sprite>_Rig.asset`). |
 | `RigAutoBuilder.cs` | Heuristic starting rig (joints from body proportions; `AssignParts` derives the part map from the joints). |
 | `RigAnimator.cs` | `RigPose`, `IRigPoseProvider` and the procedural Idle/Walk/Run/Attack/Jump/Sit poses (Jump: a key table on the 10-frame grid, no travel height, Rig only; Sit: a key table on the 8-frame grid, held last frame, Rig only; CrouchWalk: a formula (loop, thighs 96/90 degrees +-15, knee fold lifted by up to 26 degrees on the leg moving forward, same lean and arm values as the held Crouch); Crouch: a key table on the 6-frame grid, goose-step crouch (thigh about 96 degrees, shin about 36 degrees behind the vertical, torso lean 32 degrees with `Head = -Body`, arm angles = world angle minus the lean), held last frame, Rig only; the renderer fills the pelvis cells a thigh beyond 65 degrees leaves behind (`SpriteRig.FillVacatedBody` with `ThighParts`); `Head` is exactly `-Body` so the face is not re-sampled; the player's cloak tail pixels (x 17-19, y 32-38) are mapped to `LegNearUpper` in `player_east_Rig.asset` so a deep knee bend does not leave a gap under them; the Crouch test has a 4-connectivity check for floating pieces, but the visual check at 9x is what caught the gap). |
 | `TurnThroughFront.cs`, `FrontSprite.cs` | Rotate preset (`AnimationPreset.turnThroughFront`): side view -> front view held for `frontHoldSeconds` -> opposite side, from the character's own side sprite (rig-rendered) and front sprite, nearest-neighbour squashes in between (about 55% width at the half-way point), axis = centre of the side view's feet. `FrontSprite` finds the front art (`frontSpritePath` or `<base>_front/_south/_down.png`) and never invents it. Applied in `AIAnimationGenerator` right after `SpriteRig.Render` (the frame count then follows from the hold time); Rig mode only. `TurnThroughFront` is pure math, tested in `tools/posetests`. |
-| `SpriteRig.cs` | The renderer: bone hierarchy (affine matrices), grounding, composition at 4x, majority-vote downsample, vacated-body fill. Pure math. |
+| `SpriteRig.cs` | The renderer: bone hierarchy (affine matrices), grounding, composition at 4x, majority-vote downsample, vacated-body fill; underlay as extra Body pixels and `ApplyLegSwingScale` (1.7.0). Pure math. |
 | `SpriteRigEditorWindow.cs` | Rig Editor (joints, ground line, paint/fill parts, auto-assign, live preview, undo; since 1.2.0 also the *AI poses* preview mode). |
 | **AI Pose + Rig** (1.2.0) | |
 | `AIPoseAsset.cs` | `ScriptableObject` `<Sprite>_<Anim>_AIPose.asset`: `frames` = FINAL poses (what is previewed and built), `sourceFrames` = the AI poses as delivered (diagnostics + `Reclean` only; was `rawFrames`, `FormerlySerializedAs`), clean-up settings, report text, `PoseQualityData` (the quantitative report), metadata, JSON export/import (rig part names). `NewTransient` + `SaveAs`: nothing is written before validation succeeded. |
@@ -120,6 +121,9 @@ LegUpper -> LegLower -> Foot. Each part rotates about a joint (`SpriteRig.Pivot`
 
 **Data model:** `RigDefinition.joints` (sprite pixel coordinates, **y down**, origin top-left), `groundY`, and `partMask` (one `ushort` per pixel, bit *i* = `RigPart` *i*; 0 = transparent; two bits = overlapping legs).
 The mask is serialized as bytes (`maskBytes`); call `Flush()` after editing and `Invalidate()` after undo.
+Two optional fields (1.7.0, filled only from generated rig data, see below): `underlayBytes` (RGBA per pixel, y down; empty = none; `HasUnderlay`, `GetUnderlay`, `SetUnderlay`)
+and `legSwingScale` (initialised to 1; `EffectiveLegSwingScale` turns 0, negative or non-finite into 1, so rig assets saved before 1.7.0, which lack the field, behave as 1).
+`Clone()` copies both.
 
 **Frame rendering (`SpriteRig.Render`)**, per pose:
 1. Compute world matrices from the pose angles.
@@ -127,6 +131,8 @@ The mask is serialized as bytes (`maskBytes`); call `Flush()` after editing and 
 3. Draw parts back-to-front by **inverse mapping** at 4x sub-pixels (each destination sub-pixel looks up its source pixel, so rotation leaves no holes).
 4. **Majority vote** per output pixel over its 4x4 sub-pixels -> only original colours, hard edges.
 5. `FillVacatedBody`: where an arm drawn over the torso swung away, fill the hole with the nearest body colour. Then `CloseHoles` (1-pixel seams).
+   With an underlay (1.7.0) those pixels were already drawn as Body pixels in step 3 (underlay colours, beneath the arm), so there is usually nothing left to fill.
+   Without an underlay `bodySrc` is `src` and the code path is the 1.6.0 one (verified byte-identical, see section 9).
 6. Mirror back for left-facing sprites (verified to be an exact mirror).
 
 **Sign convention** (documented on `RigPose`; easy to get wrong): angles are **counter-clockwise positive on screen (y down)**. A limb hanging down swings *forward*, a forward-pointing sword tip goes *up*,
@@ -139,6 +145,13 @@ To change a motion, edit the numbers in `RigAnimator.cs`; to see the effect in s
 **Rig creation:** `RigAutoBuilder.Build` guesses joints from body-box proportions (neck 33%, hip 65% of the height by default, configurable in settings) and `AssignParts` derives the part map
 from the joints. It is only a starting point (for the 48px player it needed manual joints). The player's joints are in `tools/riglab/example_player_joints.txt` and can be re-applied with
 `-aiRigJoints <file> -aiRigOnly 1` in batch mode.
+
+**Generated rig data (1.7.0, `ChargenRigImporter`):** an external generator can ship `rig/rig.json` (format `chargen-rig/1`) + `parts.png` (+ `underlay.png`) next to the sprite.
+`ChargenRigImporter.Read` checks format, size, the sprite's sha256 and the part-bit names, reads joints / `ground_y` / part map / underlay / `animation_hints.leg_swing_scale` (accepted
+when 0 < k <= 1) straight from the files (`Texture2D.LoadImage`, never through import settings), and `Import` writes them into the sprite's normal rig asset (created, or updated
+in place keeping its GUID). Hooks, all of the form "`FindFor(...) ?? ChargenRigImporter.TryImportFor(...)`", i.e. only when a sprite has no rig asset: `AIAnimationGenerator` (unsaved in
+AI Redraw mode, like `CreateAuto`), `AIPoseGenerator`; plus the menu *Assets > AI > Import Generated Rig Data*, a Rig Editor button and `BatchRunner -aiRigImport`. Any mismatch is a
+warning and the old path (`CreateAuto` / dialog) runs. The leg swing scale is applied by `SpriteRig.ApplyLegSwingScale(rig, poses, animation)` to the poses (multiplies the six leg angles; for `animation == "run"` it also multiplies the torso angle by `ReducedSwingRunLeanScale` = 0.5 and adds the removed part to Head, ArmNearUpper and ArmFarUpper so their world angles are unchanged; returns the same array when the scale is 1) at the three places that turn poses into frames for a character: `AIAnimationGenerator`, and the Rig Editor's procedural and AI-pose previews. It is deliberately not inside `Render`, so `RigPoseFitter` and `RigKinematics` keep seeing the angles they set. Nothing else reads the new fields.
 
 **Source of truth for identity:** original pixels. Never add a step that recolours, smooths or redraws in Rig mode.
 
@@ -271,6 +284,10 @@ AI Pose + Rig (1.2.0) was tested this way (`C:\AI\unitytest`, scripts in `C:\AI\
 * `-aiSelfTest 1` passes with the new AI Pose step (poses generated, rebuilt from the saved poses). `tools/posetests` passes (see `tools/README.md`).
 * Palette/alpha/grounding/border checks on all 32 AI-pose frames; Animator Controller keeps the hand-made `Idle`/`Walk` states and adds `... (AI)` states.
 
+Generated rig data (1.7.0) was tested like this (scripts in the scratch area, not in the repo):
+* Outside Unity: the rig sources at git HEAD and in the working tree compiled side by side (`RigDefinition`, `RigAutoBuilder`, `RigAnimator`, `SpriteRig` + a small harness). Every procedural animation (84 frames), both facings: byte-identical for the player's rig asset, an auto-built rig, the riglab example rig and 12 generated characters without their data; also for leg scale 1 / 0 / -2 and an all-transparent underlay. With the data the renderer equals the approved prototype. `tools/posetests` passes.
+* In Unity (a copy of the game, `-executeMethod` test driver, HEAD package vs 1.7.0): the player's 9 presets, an un-rigged sprite and a generated character without `rig/` give byte-identical frames and clips (146 files). With 1.7.0: the importer reproduces `parts.png` / `underlay.png` exactly for 12 characters, auto-import on first generation for six (normal, sword, katana, two robed, dwarf), tampered sprite refused with fallback to the auto rig, import over an existing rig keeps the GUID, the fields survive save/reload, a 1.6.0 rig asset reads leg scale 1. Unity's 204 frames equal the harness renders. Quality numbers (exposed outline pixels, tears, robe separation) are in the generator's `docs/animation-investigation.md`.
+
 Checks that were run and passed on the final code (RTX 3080, ComfyUI 0.38.0):
 * Rig: Idle/Walk/Run/Attack on the player sprite, about 10 s each; every output pixel is a source palette colour, alpha is 0/255, no clipping, identical pivot, PPU 16 / Point, correct loop flags,
   Animator state kept the hand-made `Walk` and added `Walk (AI)`; lowest foot row constant for Idle/Walk/Attack, Run only lifts off. Left-facing = exact mirror.
@@ -292,7 +309,8 @@ Note that after the hierarchical rig, "pixel match at the same position" is lowe
 ## 10. Known limitations and ideas
 
 * **Auto-rig quality:** proportions-based; needs manual joints for unusual sprites. A better silhouette analysis could improve it.
-* **Hidden arms:** an arm painted over the torso leaves a hole that is filled with the surrounding colour (visible as a lighter patch on this sprite during Attack). Artist-supplied "under-arm" pixels would be better.
+* **Hidden arms:** an arm painted over the torso leaves a hole that is filled with the surrounding colour (visible as a lighter patch on this sprite during Attack). Since 1.7.0 a rig can carry an underlay with the hidden torso pixels (generated characters ship one); hand-made rigs have none yet, and the Rig Editor cannot paint one.
+* **Generated rig data** is only as good as its part map. The Local Character Generator (0.4.0) keeps held items, far-hand items and limb fragments attached and puts the weapon pivot at the grip; with its data no such piece floats on 12 test characters. Robed rigs (scale < 1) lean half as much in Run (5.5 deg), because the full 11 deg swung the hem off the front foot (`Render` rotates the whole Body, robe included, about the hip); at 5.5 deg nothing floats, the front foot still joins the hem by only 1-3 pixels in Run frames 6-7, a limit of the 0.3 leg swing (a smaller lean does not improve it, measured down to 0 deg). The leg swing scale applies to every animation including Jump/Sit/Crouch, which then fold a robe less.
 * **Walk/Run arm swing** moves the sword noticeably forward; `hold` factors in `RigAnimator.Locomotion` and `rigIntensity` tune this.
 * **Rig is side-view oriented** (near/far limbs, facing left/right). Top-down or front-view characters would need another part set.
 * **Sliced sprite sheets:** a rig is matched by texture path + sprite name + size; a re-sliced sheet needs a new rig.

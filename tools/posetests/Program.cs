@@ -626,6 +626,54 @@ Console.WriteLine("== CrouchWalk (goose-step walk: the crouch posture, legs taki
     Check(maxStep <= 600, "CrouchWalk: no frame-to-frame jump (the loop seam included); for reference Walk changes up to about 570 pixels per step and Run up to about 750");
 }
 
+// ---------------------------------------------------------------- 14. reduced leg swing (robed rigs): legs scaled, Run leans less, nothing else changes
+Console.WriteLine("== Leg swing scale / robed Run lean (SpriteRig.ApplyLegSwingScale)");
+{
+    float Deg(float r) => r * Mathf.Rad2Deg;
+    var runPoses = ProceduralRigPoses.Instance.GetPoses("run", 8, 8, 1f);
+    var walkPoses = ProceduralRigPoses.Instance.GetPoses("walk", 8, 8, 1f);
+    var attackPoses = ProceduralRigPoses.Instance.GetPoses("attack", 10, 10, 1f);
+    Check(ReferenceEquals(SpriteRig.ApplyLegSwingScale(rig, runPoses, "run"), runPoses) && ReferenceEquals(SpriteRig.ApplyLegSwingScale(rig, walkPoses, "walk"), walkPoses),
+        "scale 1 (every hand-made / auto-built rig): the poses come back unchanged (same array), Run included");
+    var unset = rig.Clone(); unset.legSwingScale = 0f;
+    Check(ReferenceEquals(SpriteRig.ApplyLegSwingScale(unset, runPoses, "run"), runPoses), "scale 0 (a rig asset saved before 1.7.0) counts as 1");
+
+    var robed = rig.Clone(); robed.legSwingScale = 0.3f;
+    float before = runPoses[3][RigPart.Body];
+    var runR = SpriteRig.ApplyLegSwingScale(robed, runPoses, "run");
+    Check(runPoses[3][RigPart.Body] == before && !ReferenceEquals(runR, runPoses), "the input poses are not modified");
+    bool lean = true, world = true, legs = true, rest = true;
+    for (int i = 0; i < runR.Length; i++)
+    {
+        RigPose a = runPoses[i], b = runR[i];
+        lean &= Mathf.Abs(b[RigPart.Body] - a[RigPart.Body] * SpriteRig.ReducedSwingRunLeanScale) < 1e-6f;
+        foreach (var c in new[] { RigPart.Head, RigPart.ArmNearUpper, RigPart.ArmFarUpper })
+            world &= Mathf.Abs((b[c] + b[RigPart.Body]) - (a[c] + a[RigPart.Body])) < 1e-5f;     // world angle unchanged
+        foreach (RigPart leg in new[] { RigPart.LegNearUpper, RigPart.LegNearLower, RigPart.FootNear, RigPart.LegFarUpper, RigPart.LegFarLower, RigPart.FootFar })
+            legs &= Mathf.Abs(b[leg] - a[leg] * 0.3f) < 1e-6f;
+        foreach (RigPart q in new[] { RigPart.Hair, RigPart.ArmNearLower, RigPart.Weapon, RigPart.ArmFarLower })
+            rest &= b[q] == a[q];
+        rest &= b.root == a.root && b.hop == a.hop;
+    }
+    Check(lean && Mathf.Abs(Deg(runR[0][RigPart.Body]) + 5.5f) < 0.01f, $"robed Run: torso lean x{SpriteRig.ReducedSwingRunLeanScale} (11 -> {-Deg(runR[0][RigPart.Body]):0.0} degrees)");
+    Check(world, "robed Run: head and upper arms keep their world angles (the face is not re-sampled, the arm swing is unchanged)");
+    Check(legs, "robed Run: leg angles x0.3");
+    Check(rest, "robed Run: forearms, weapon, hair, root and hop unchanged");
+
+    bool walkOk = true;
+    foreach (var (kind, src) in new[] { ("walk", walkPoses), ("attack", attackPoses) })
+    {
+        var r = SpriteRig.ApplyLegSwingScale(robed, src, kind);
+        for (int i = 0; i < r.Length; i++)
+            for (int q = 0; q < RigDefinition.PartCount; q++)
+            {
+                bool isLeg = q >= (int)RigPart.LegNearUpper;
+                walkOk &= isLeg ? Mathf.Abs(r[i].angle[q] - src[i].angle[q] * 0.3f) < 1e-6f : r[i].angle[q] == src[i].angle[q];
+            }
+    }
+    Check(walkOk, "robed Walk and Attack: only the legs are scaled (the lean change is Run only)");
+}
+
 // ---------------------------------------------------------------- 7. fixtures for the Unity-side import tests (written when a folder is given)
 if (args.Length > 2)
 {

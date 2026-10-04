@@ -31,13 +31,13 @@ Unity **6000.6** or newer. Developed and tested on **6000.6.0f1** only; older ve
 **From Git** (Unity: *Window > Package Manager > + > Install package from git URL*):
 
 ```
-https://github.com/<YOUR-GITHUB-USER>/AI-Sprite-Animation.git?path=/package#v1.0.0
+https://github.com/JatCool/AI-Sprite-Animation.git?path=/package#v1.7.0
 ```
 
 or in `Packages/manifest.json`:
 
 ```json
-"com.limpo.ai-sprite-animation": "https://github.com/<YOUR-GITHUB-USER>/AI-Sprite-Animation.git?path=/package#v1.0.0"
+"com.limpo.ai-sprite-animation": "https://github.com/JatCool/AI-Sprite-Animation.git?path=/package#v1.7.0"
 ```
 
 **From a local folder** (development; relative to the project's `Packages/` folder):
@@ -129,6 +129,30 @@ Only intentional vertical movement (`hop`) leaves the ground line. Translations 
 **Pixel art:** parts are composed at 4x and reduced by majority vote per pixel, so the output contains only colours that exist in the source, with hard edges, no blending
 and no anti-aliasing. Where an arm swings away from the torso, the vacated spot is filled with the surrounding body colour. Frames are cropped to the union of all used pixels
 with the source pivot mapped identically into every frame.
+
+### Generated rig data (1.7.0, optional)
+
+A character generator can deliver the rig together with the sprite: a folder `rig/` next to the sprite with `rig.json` (format `chargen-rig/1`),
+`parts.png` and optionally `underlay.png` (the Local Character Generator, a separate repository, writes exactly this; the format is described in its
+`docs/rig-data.md`). The package then uses three things from it, all optional and all stored in the ordinary `<Sprite>_Rig.asset`:
+
+| Data | Effect |
+|---|---|
+| **Joints, ground line and per-pixel part map** (`parts.png`: R = part bits 0-7, G = bits 8-15, alpha = sprite pixel) | used instead of the auto-built rig; the part map is a 1:1 copy of what the Rig Editor's *Paint parts* stores |
+| **Hidden-pixel layer** (`underlay.png`: what the torso looks like behind the near arm / weapon, in the sprite's own colours) | those pixels also become *Body* pixels, drawn beneath the arm; when the arm swings away they show instead of a hole or an outline |
+| **Leg swing scale** (`animation_hints.leg_swing_scale`, 0 < k <= 1) | every leg angle of every generated pose is multiplied by k: robed characters (about 0.3) keep the robe as one silhouette instead of scissoring legs; such a rig (k < 1) also leans its torso half as much in **Run** (about 5.5 instead of 11 degrees; head and upper arms keep their world angles), so the robe's hem does not swing back off the front foot; Walk, Attack and every other animation keep their lean |
+
+**When it is used:** when a sprite has **no rig asset yet** and `rig/rig.json` exists next to it, *Generate Animation* (and *Generate Poses*) imports it
+automatically instead of auto-building a rig. Explicitly: right-click the sprite > *AI > Import Generated Rig Data* (asks before replacing an existing rig;
+Undo restores it), the **Import Generated Rig Data** button of the Sprite Rig Editor, or batch `-aiRigImport <rig.json|folder|auto>`.
+The data must belong to exactly this sprite: same size and the sprite's sha256 as recorded in `rig.json`; otherwise it is not used (a warning in the Console names
+the reason) and the rig is made as before. Joints, parts and ground line can be refined afterwards in the Rig Editor as usual; *Auto-assign parts* / *Reset rig*
+keep working the old way: *Auto-assign parts* replaces the generated part map (the underlay and leg swing scale stay), *Reset rig* drops all generated data. The leg swing scale is a field of the rig (*Leg Swing Scale* in the rig asset's Inspector) and
+applies to every animation of that character, also to Jump/Sit/Crouch, which then fold the robe less.
+
+**Unchanged when the data is absent:** a rig without an underlay and with leg swing scale 1 (every hand-made or auto-built rig, and every rig asset saved by
+1.6.0 or earlier, whose missing fields read as "none" / 1) renders byte-identically to 1.6.0. The leg scale is applied to the poses before rendering, not inside
+`SpriteRig.Render`, so the AI pose fitter and the kinematics see the angles they set.
 
 ### Extending: pose providers
 
@@ -382,7 +406,7 @@ Unity.exe -batchmode -nographics -projectPath <project> -executeMethod AISpriteA
 ```
 
 Other arguments: `-aiComfyDir`, `-aiComfyUrl`, `-aiSeed`, `-aiController`, `-aiTimeout <s>`, `-aiCancelAfter <s>`, `-aiDiagnostics live|offline`, `-aiSelfTest 1`,
-`-aiOverride "mode=ai,denoise=0.8,..."` (`mode=rig|pose|ai`, also `poseBackend`, `candidates`, `videoSteps`, `videoFrames`, `videoMotion`, `videoWidth`, `videoHeight`, `sdposeModel`, `goodEnough`, `minQuality`, `smoothing`, `smoothPasses`, `stepDegrees`, `checkpoint`, and `poseGuidance`, `poseSize`, `sketchVariation`, `evidenceWeight` for the legacy backend), `-aiWorkflow <file>`, `-aiRigJoints <file> [-aiRigOnly 1]` (build/refresh a sprite's rig from a joints file with lines like `Neck 26 18.5` and `ground 47`). In batch mode a missing rig is created automatically. Exit code 0 = success, 1 = failure, 2 = cancelled.
+`-aiOverride "mode=ai,denoise=0.8,..."` (`mode=rig|pose|ai`, also `poseBackend`, `candidates`, `videoSteps`, `videoFrames`, `videoMotion`, `videoWidth`, `videoHeight`, `sdposeModel`, `goodEnough`, `minQuality`, `smoothing`, `smoothPasses`, `stepDegrees`, `checkpoint`, and `poseGuidance`, `poseSize`, `sketchVariation`, `evidenceWeight` for the legacy backend), `-aiWorkflow <file>`, `-aiRigJoints <file> [-aiRigOnly 1]` (build/refresh a sprite's rig from a joints file with lines like `Neck 26 18.5` and `ground 47`), `-aiRigImport <rig.json|folder|auto> [-aiRigOnly 1]` (import generated rig data, see *Generated rig data*; `auto` = `rig/rig.json` next to the sprite; exit code 1 if it does not fit the sprite). In batch mode a missing rig is created automatically. Exit code 0 = success, 1 = failure, 2 = cancelled.
 
 AI Pose + Rig: `-aiMode pose` (or `-aiOverride mode=pose`), `-aiPoseBackend sdpose|legacy|procedural`, then `-aiPoseAction generate` (run the AI, save poses, stop; `-aiPoseDump <folder>` writes the generated video frames and the SDPose keypoints of every candidate),
 `build` (default in this mode: saved poses only, never starts ComfyUI), `both` (regenerate, then build), `preview` (render a saved pose asset to `-aiPoseSheet <png>` with or without `-aiPoseBones 0`, export `-aiPoseExportJson <file>`),
@@ -391,7 +415,7 @@ AI Pose + Rig: `-aiMode pose` (or `-aiOverride mode=pose`), `-aiPoseBackend sdpo
 ## 9. Architecture and extending
 
 Unity editor code only (`Editor/`, assembly `AISpriteAnimation.Editor`); no runtime code, no models in the repository.
-`RigDefinition` / `SpriteRigAsset` (joints + part map), `RigAnimator` (poses, `IRigPoseProvider`) and `SpriteRig` (hierarchy renderer) form the Rig method; `SkeletonPoses` draws the OpenPose images for AI Redraw; the AI Pose layers are `IPoseGenerator` with `SDPosePoseGenerator` (AI), `ProceduralPoseGenerator` and `SketchEvidencePoseGenerator` (neither is AI), `AIPoseGenerator` (orchestration: validate, measure the AI contribution, save, stop ComfyUI), `ComfyUIWorkflowRunner`, `SDPoseModel` / `SDPoseModelInstaller`, `SDPoseAnalysis`, `OpenPoseTracking`, `OpenPoseMapper` / `OpenPoseKeypoints`, `MotionCycleExtractor`, `PoseContribution`, `PoseValidator` / `PoseSmoother` / `PoseCleanup` / `PoseCleanupSettings`, `AIPoseAsset`, `AIPoseProvider`, `AIPoseImporter`, `RigKinematics`, `PosePreviewPlayer`, and for the legacy backend `PoseSketch` and `RigPoseFitter`; `SpriteFrameProcessor` does canvas, palette, masking, crop and pivot; `SpriteAnimationImporter` imports and builds clips;
+`RigDefinition` / `SpriteRigAsset` (joints + part map, optional underlay and leg swing scale), `ChargenRigImporter` (generated rig data -> rig asset), `RigAnimator` (poses, `IRigPoseProvider`) and `SpriteRig` (hierarchy renderer) form the Rig method; `SkeletonPoses` draws the OpenPose images for AI Redraw; the AI Pose layers are `IPoseGenerator` with `SDPosePoseGenerator` (AI), `ProceduralPoseGenerator` and `SketchEvidencePoseGenerator` (neither is AI), `AIPoseGenerator` (orchestration: validate, measure the AI contribution, save, stop ComfyUI), `ComfyUIWorkflowRunner`, `SDPoseModel` / `SDPoseModelInstaller`, `SDPoseAnalysis`, `OpenPoseTracking`, `OpenPoseMapper` / `OpenPoseKeypoints`, `MotionCycleExtractor`, `PoseContribution`, `PoseValidator` / `PoseSmoother` / `PoseCleanup` / `PoseCleanupSettings`, `AIPoseAsset`, `AIPoseProvider`, `AIPoseImporter`, `RigKinematics`, `PosePreviewPlayer`, and for the legacy backend `PoseSketch` and `RigPoseFitter`; `SpriteFrameProcessor` does canvas, palette, masking, crop and pivot; `SpriteAnimationImporter` imports and builds clips;
 `IAIAnimationBackend` / `ComfyUIAnimationBackend` / `ComfyUIClient` / `ComfyUIProcessManager` are the ComfyUI side. Add a pose style in `SkeletonPoses`; another model or service behind `IAIAnimationBackend`.
 
 ## Troubleshooting

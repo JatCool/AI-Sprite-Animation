@@ -95,7 +95,7 @@ namespace AISpriteAnimation
 
             // Rig mode needs a rig for this sprite. AIRedraw only needs a silhouette guide, which is built in memory.
             bool useAI = settings.mode == AnimationMode.AIRedraw;
-            SpriteRigAsset rigAsset = SpriteRigAsset.FindFor(source, settings);
+            SpriteRigAsset rigAsset = SpriteRigAsset.FindFor(source, settings) ?? ChargenRigImporter.TryImportFor(source, settings, save: !useAI);
             if (rigAsset == null)
             {
                 if (useAI) rigAsset = SpriteRigAsset.CreateAuto(source, settings, save: false);
@@ -163,7 +163,7 @@ namespace AISpriteAnimation
                 IRigPoseProvider poseProvider = poseAsset != null
                     ? new AIPoseProvider(poseAsset, rigAsset.definition, settings.poseCleanup)
                     : (IRigPoseProvider)ProceduralRigPoses.Instance;
-                RigPose[] rigPoses = poseProvider.GetPoses(preset.poseKind, options.Frames, options.Frames, preset.rigIntensity);
+                RigPose[] rigPoses = SpriteRig.ApplyLegSwingScale(rigAsset.definition, poseProvider.GetPoses(preset.poseKind, options.Frames, options.Frames, preset.rigIntensity), preset.poseKind);
                 if (poseProvider is AIPoseProvider aiProvider)
                 {
                     outcome.PoseReport = aiProvider.LastReport;

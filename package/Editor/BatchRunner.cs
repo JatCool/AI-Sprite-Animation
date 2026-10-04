@@ -11,6 +11,7 @@ namespace AISpriteAnimation
     /// Unity -batchmode -projectPath P -executeMethod AISpriteAnimation.BatchRunner.Run -aiSource Assets/Art/hero.png -aiPreset Walk
     /// Machine setup: -aiComfyDir <folder with main.py> [-aiComfyPython exe] [-aiComfyUrl url] [-aiConfigureOnly 1].
     /// Optional: -aiFrames N -aiFps N -aiSeed N -aiController Assets/x.controller -aiTimeout seconds -aiCancelAfter seconds.
+    /// Rig: -aiRigJoints joints.txt | -aiRigImport rig.json|folder|auto (generated rig data, see ChargenRigImporter); add -aiRigOnly 1 to stop after the rig.
     /// The editor exits with code 0 on success, 1 on failure, 2 if cancelled.
     /// </summary>
     public static class BatchRunner
@@ -180,6 +181,22 @@ namespace AISpriteAnimation
                 rigAsset.Commit();
                 AssetDatabase.SaveAssets();
                 Debug.Log("[AI Sprite Animation] Rig written: " + AssetDatabase.GetAssetPath(rigAsset));
+                if (Arg("-aiRigOnly") != null) { EditorApplication.Exit(0); return; }
+            }
+
+            // Optional: import generated rig data (chargen-rig/1: rig.json + parts.png [+ underlay.png]) into this sprite's rig asset, then continue or stop.
+            // -aiRigImport <rig.json or its folder>; "auto" = rig/rig.json next to the sprite.
+            if (Arg("-aiRigImport") != null)
+            {
+                if (!SourceSprite.TryResolve(source, settings, out SourceSprite importSource, out string importError)) { Debug.LogError("[AI Sprite Animation] " + importError); EditorApplication.Exit(1); return; }
+                string rigJson = Arg("-aiRigImport") == "auto" ? ChargenRigImporter.FindRigJson(importSource) : Arg("-aiRigImport");
+                try
+                {
+                    if (rigJson == null) throw new System.IO.FileNotFoundException($"No rig/rig.json next to '{importSource.AssetPath}'.");
+                    var imported = ChargenRigImporter.Import(importSource, settings, rigJson);
+                    Debug.Log($"[AI Sprite Animation] Rig imported from '{rigJson}': {AssetDatabase.GetAssetPath(imported)} (underlay: {imported.definition.HasUnderlay}, leg swing scale: {imported.definition.EffectiveLegSwingScale})");
+                }
+                catch (Exception e) { Debug.LogError("[AI Sprite Animation] Rig import failed: " + e.Message); EditorApplication.Exit(1); return; }
                 if (Arg("-aiRigOnly") != null) { EditorApplication.Exit(0); return; }
             }
 
