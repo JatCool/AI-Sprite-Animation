@@ -63,6 +63,9 @@ namespace AISpriteAnimation
     /// </summary>
     public static class AIAnimationGenerator
     {
+        /// <summary>Longest Rig clip (the AI methods are limited by the pose slots of the workflow instead).</summary>
+        public const int RigMaxFrames = 120;
+
         public static bool IsRunning { get; private set; }
 
         internal static void SetRunning(bool running) => IsRunning = running;
@@ -82,13 +85,15 @@ namespace AISpriteAnimation
             var preset = settings.FindPreset(options.PresetName);
             if (preset == null) return Fail($"Animation preset '{options.PresetName}' not found in the settings asset.");
             if (string.IsNullOrWhiteSpace(settings.LoadWorkflowText())) return Fail($"No workflow found. Assign one in the settings asset or reinstall the package ({PackagePaths.DefaultWorkflow}).");
-            if (options.Frames < 2 || options.Frames > ComfyWorkflowBuilder.MaxFrames) return Fail($"Frame count must be between 2 and {ComfyWorkflowBuilder.MaxFrames} (the bundled workflow has {ComfyWorkflowBuilder.MaxFrames} pose slots).");
+            // The 24-slot limit belongs to the ComfyUI workflow; a Rig clip is drawn by the rig and can be longer (a cutscene animation like WakeUp).
+            int maxFrames = settings.mode == AnimationMode.Rig ? RigMaxFrames : ComfyWorkflowBuilder.MaxFrames;
+            if (options.Frames < 2 || options.Frames > maxFrames) return Fail(settings.mode == AnimationMode.Rig ? $"Frame count must be between 2 and {RigMaxFrames}." : $"Frame count must be between 2 and {ComfyWorkflowBuilder.MaxFrames} (the bundled workflow has {ComfyWorkflowBuilder.MaxFrames} pose slots).");
             if (options.Fps < 1) return Fail("FPS must be at least 1.");
             if (settings.generationSize % 8 != 0 || settings.generationSize < 256) return Fail("Generation size must be a multiple of 8 and at least 256.");
 
             if (preset.turnThroughFront && settings.mode != AnimationMode.Rig)
                 return Fail($"'{preset.name}' turns the character through its front view using the character's own side and front sprites (pixel-exact) and is a Rig animation: set the Animation Method to Rig.");
-            if ((string.Equals(preset.poseKind, "jump", StringComparison.OrdinalIgnoreCase) || string.Equals(preset.poseKind, "sit", StringComparison.OrdinalIgnoreCase) || string.Equals(preset.poseKind, "crouch", StringComparison.OrdinalIgnoreCase) || string.Equals(preset.poseKind, "crouchwalk", StringComparison.OrdinalIgnoreCase)) && settings.mode != AnimationMode.Rig)
+            if ((string.Equals(preset.poseKind, "jump", StringComparison.OrdinalIgnoreCase) || string.Equals(preset.poseKind, "sit", StringComparison.OrdinalIgnoreCase) || string.Equals(preset.poseKind, "crouch", StringComparison.OrdinalIgnoreCase) || string.Equals(preset.poseKind, "crouchwalk", StringComparison.OrdinalIgnoreCase) || string.Equals(preset.poseKind, "wakeup", StringComparison.OrdinalIgnoreCase) || string.Equals(preset.poseKind, "ignite", StringComparison.OrdinalIgnoreCase)) && settings.mode != AnimationMode.Rig)
                 return Fail($"'{preset.name}' is a Rig animation (the AI methods have no {preset.poseKind} skeleton or motion prompt): set the Animation Method to Rig.");
             Color32[] frontPixels = null; int frontW = 0, frontH = 0;
             if (preset.turnThroughFront && !FrontSprite.TryLoad(source, settings, out frontPixels, out frontW, out frontH, out string frontError)) return Fail(frontError);

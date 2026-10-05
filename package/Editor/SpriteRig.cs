@@ -199,7 +199,7 @@ namespace AISpriteAnimation
                 Color32[] grid = Downsample(hiColor, hiOwner, hi, cells, out byte[] owner);
                 FillVacatedBody(grid, owner, cells, pixels, m[(int)RigPart.Body], sw, placeLeft, placeTop, OverlayParts);
                 if (Mathf.Abs(pose.angle[(int)RigPart.LegNearUpper]) > DeepThighRadians || Mathf.Abs(pose.angle[(int)RigPart.LegFarUpper]) > DeepThighRadians)
-                    FillVacatedBody(grid, owner, cells, pixels, m[(int)RigPart.Body], sw, placeLeft, placeTop, ThighParts);
+                    FillVacatedBody(grid, owner, cells, pixels, m[(int)RigPart.Body], sw, placeLeft, placeTop, ThighParts, rig.HasUnderlay ? src : null);
                 CloseHoles(grid, cells);
 
                 // y-down -> bottom-left origin, undoing the mirror for left-facing sprites.
@@ -315,9 +315,12 @@ namespace AISpriteAnimation
 
         // An arm drawn in front of the torso leaves a hole in the torso when it swings away. Fill those cells with the colour of the
         // nearest body cells (the colour that was around the arm), so the torso stays solid. Only cells where a moved arm used to be are touched.
-        private static void FillVacatedBody(Color32[] grid, byte[] owner, int cells, List<int>[] pixels, Affine bodyMatrix, int sw, int placeLeft, int placeTop, RigPart[] parts)
+        // ownColours (generated rigs with an underlay only): fill a vacated cell with the colour of the part pixel that used to be there (the pants a thigh
+        // leaves behind) instead of the nearest torso colour, which near the hips can be skin from the underlay. null = the original behaviour (player rigs, byte-identical).
+        private static void FillVacatedBody(Color32[] grid, byte[] owner, int cells, List<int>[] pixels, Affine bodyMatrix, int sw, int placeLeft, int placeTop, RigPart[] parts, Color32[] ownColours = null)
         {
             var holes = new List<int>();
+            var direct = new List<(int, Color32)>();
             foreach (RigPart part in parts)
                 foreach (int idx in pixels[(int)part])
                 {
@@ -325,8 +328,12 @@ namespace AISpriteAnimation
                     int cx = Mathf.FloorToInt(q.x + placeLeft), cy = Mathf.FloorToInt(q.y + placeTop);
                     if (cx < 0 || cy < 0 || cx >= cells || cy >= cells) continue;
                     int ci = cy * cells + cx;
-                    if (grid[ci].a == 0) holes.Add(ci);
+                    if (grid[ci].a != 0) continue;
+                    if (ownColours != null && ownColours[idx].a != 0) direct.Add((ci, ownColours[idx]));
+                    else holes.Add(ci);
                 }
+            byte ownOwner = (byte)((int)RigPart.Body + 1);
+            foreach (var (ci, col) in direct) { grid[ci] = new Color32(col.r, col.g, col.b, 255); owner[ci] = ownOwner; }
             if (holes.Count == 0) return;
 
             byte bodyOwner = (byte)((int)RigPart.Body + 1);

@@ -54,6 +54,8 @@ namespace AISpriteAnimation
                 case "sit": return Sit(t, n, k);
                 case "crouch": return Crouch(t, n, k);
                 case "crouchwalk": return CrouchWalk(t, n, k);
+                case "wakeup": return FromWorldKeys(WakeUpKeys, t, n, false, true);
+                case "ignite": return FromWorldKeys(IgniteKeys, t, n, true);
                 default: return new RigPose();   // rest pose
             }
         }
@@ -247,6 +249,87 @@ namespace AISpriteAnimation
             p.hop = V(15) * k;
             return p;
         }
+
+
+        // ---- WakeUp and Ignite: key tables in WORLD angles (degrees, 0 = hanging straight down, positive = swinging forward, 180 = up), converted to the rig's parent-relative angles ----
+        // This is easier to author for poses far from standing (lying face down): an arm "pointing down" is 0 whatever the torso does. Rig intensity is ignored (the poses are
+        // exact). Feet: footWorld 0 = flat on the ground, footWorld = shinWorld = toes following the shin (kneeling / lying).
+        // columns: u, body, head, hair, upperN, lowerN, upperF, lowerF, thighN, shinN, footN, thighF, shinF, footF, hop, rootX, rootY (y down, pixels)
+        private static RigPose FromWorldKeys(float[][] keys, int t, int n, bool tremble = false, bool smooth = false)
+        {
+            float u = n > 1 ? t / (float)(n - 1) : 0f;
+            int a = 0;
+            while (a < keys.Length - 2 && u > keys[a + 1][0]) a++;
+            float[] ka = keys[a], kb = keys[a + 1];
+            float f = Mathf.Clamp01((u - ka[0]) / (kb[0] - ka[0]));
+            float eased = f * f * (3f - 2f * f);   // ease in/out
+            // smooth = a cubic Hermite curve through the keys (no stop at every key), with the tangent set to zero at a local extreme so it never overshoots a key.
+            float V(int i)
+            {
+                if (!smooth) return Mathf.Lerp(ka[i], kb[i], eased);
+                float h = kb[0] - ka[0];
+                float slope = (kb[i] - ka[i]) / h;
+                float m0 = 0f, m1 = 0f;
+                if (a > 0) { float before = (ka[i] - keys[a - 1][i]) / (ka[0] - keys[a - 1][0]); if (before * slope > 0f) m0 = (before + slope) * 0.5f; }
+                if (a + 2 < keys.Length) { float after = (keys[a + 2][i] - kb[i]) / (keys[a + 2][0] - kb[0]); if (after * slope > 0f) m1 = (after + slope) * 0.5f; }
+                float f2 = f * f, f3 = f2 * f;
+                return (2f * f3 - 3f * f2 + 1f) * ka[i] + (f3 - 2f * f2 + f) * h * m0 + (-2f * f3 + 3f * f2) * kb[i] + (f3 - f2) * h * m1;
+            }
+
+            float body = V(1), head = V(2), hair = V(3), upN = V(4), loN = V(5), upF = V(6), loF = V(7), thN = V(8), shN = V(9), ftN = V(10), thF = V(11), shF = V(12), ftF = V(13);
+            if (tremble && u > 0.4f)   // the held pose of Ignite shivers a little: the power is not under control yet
+            {
+                upN += 1.6f * Mathf.Sin(t * 2.4f);
+                loN += 2.2f * Mathf.Sin(t * 2.4f + 1.2f);
+            }
+
+            var p = new RigPose();
+            p.SetDegrees(RigPart.Body, body);
+            p.SetDegrees(RigPart.Head, head - body);
+            p.SetDegrees(RigPart.Hair, hair - head);
+            p.SetDegrees(RigPart.ArmNearUpper, upN - body); p.SetDegrees(RigPart.ArmNearLower, loN - upN);
+            p.SetDegrees(RigPart.ArmFarUpper, upF - body); p.SetDegrees(RigPart.ArmFarLower, loF - upF);
+            p.SetDegrees(RigPart.LegNearUpper, thN); p.SetDegrees(RigPart.LegNearLower, shN - thN); p.SetDegrees(RigPart.FootNear, ftN - shN);
+            p.SetDegrees(RigPart.LegFarUpper, thF); p.SetDegrees(RigPart.LegFarLower, shF - thF); p.SetDegrees(RigPart.FootFar, ftF - shF);
+            p.hop = V(14);
+            p.root = new Vector2(V(15), V(16));
+            return p;
+        }
+
+        // WakeUp (one-shot, 30 frames at 10 fps, smooth curves through the keys): lying face down, a breath, the hands come in, she pushes up, both knees come under
+        // (hands and knees), the near foot steps forward (a deep lunge, the far knee on the ground), she rises with the back foot dragging, stands unsteadily, raises the near hand to her forehead (elbow high, head
+        // bowed) and holds that pose (the last 2 keys are the hold: the game plays the first dialogue line while it lasts, then returns to Idle).
+        // Lying: the torso is rotated -90 (clockwise: the head leads to the right, the face looks at the ground), the legs trail backwards (-88).
+        // The renderer pins the lowest foot to the ground line, so every phase keeps a foot, a knee or a shin on the ground (no leg hangs in the air behind the body).
+        private static readonly float[][] WakeUpKeys =
+        {
+            //          u    body  head  hair   upN   loN   upF   loF   thN   shN   ftN   thF   shF   ftF  hop rX rY
+            new[] { 0.00f,  -90f,  -90f,  0f,  -84f,  -84f,  -96f,  -96f,  -88f,  -88f,  -88f,  -92f,  -92f,  -92f, 0f, 0f, 0f },
+            new[] { 0.07f,  -89f,  -86f,  2f,  -82f,  -80f,  -95f,  -93f,  -88f,  -88f,  -88f,  -91f,  -91f,  -91f, 0f, 0f, 0f },
+            new[] { 0.19f,  -86f,  -78f,  8f,  -50f,   -5f,  -70f,  -20f,  -87f,  -87f,  -87f,  -90f,  -90f,  -90f, 0f, 0f, 0f },
+            new[] { 0.30f,  -66f,  -46f, 10f,    6f,    3f,   14f,    8f,  -84f,  -84f,  -84f,  -88f,  -88f,  -88f, 0f, 0f, 0f },
+            new[] { 0.40f,  -58f,  -40f,  8f,   10f,    6f,   14f,    8f,  -50f,  -92f,  -92f,  -54f,  -92f,  -92f, 0f, 0f, 0f },
+            new[] { 0.49f,  -76f,  -52f,  6f,    4f,    2f,    8f,    4f,    4f,  -90f,  -90f,    6f,  -90f,  -90f, 0f, 0f, 0f },
+            new[] { 0.54f,  -64f,  -42f,  6f,   10f,   12f,   16f,   14f,   42f,  -62f,  -62f,    4f,  -90f,  -90f, 0f, 0f, 0f },
+            new[] { 0.59f,  -46f,  -28f,  6f,   20f,   26f,   26f,   22f,   84f,  -12f,    0f,    4f,  -90f,  -90f, 0f, 0f, 0f },
+            new[] { 0.70f,  -24f,  -12f,  5f,   24f,   32f,   30f,   34f,   46f,   -4f,    0f,  -18f,  -34f,  -20f, 0f, 0f, 0f },
+            new[] { 0.79f,   -8f,   -8f,  3f,   20f,   26f,   16f,   22f,   14f,    0f,    0f,   -2f,  -16f,  -12f, 0f, 0f, 0f },
+            new[] { 0.86f,   -3f,  -14f,  3f,   70f,  120f,   -5f,    3f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
+            new[] { 0.93f,    0f,  -10f,  3f,  108f,  162f,   -5f,    3f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
+            new[] { 1.00f,    0f,   -9f,  3f,  110f,  165f,   -5f,    3f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
+        };
+
+        // Ignite (one-shot, 10 frames at 12 fps, the last frame is the held pose): she looks at her right hand, raises it palm up in front of her, and it shivers.
+        // The flame itself is a game effect placed on the palm of the last frame.
+        private static readonly float[][] IgniteKeys =
+        {
+            //          u    body  head  hair   upN   loN   upF   loF   thN   shN   ftN   thF   shF   ftF  hop rX rY
+            new[] { 0.00f,    0f,    0f,  0f,    5f,   15f,   -5f,    3f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
+            new[] { 0.22f,    2f,   -4f,  2f,   30f,   60f,   10f,   50f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
+            new[] { 0.44f,    4f,  -10f,  3f,   45f,   95f,   12f,   55f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
+            new[] { 0.70f,    3f,  -12f,  3f,   40f,   92f,   12f,   55f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
+            new[] { 1.00f,    3f,  -12f,  3f,   42f,   96f,   12f,   55f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
+        };
 
         // ---- crouch walk (goose-step walk): the held crouch pose, with the legs taking turns (loop) ----
         // Same posture as Crouch (hips near knee height, torso leaning 32 degrees with Head = -Body so the face is never re-sampled, arms hanging in front of the knees, sword low),

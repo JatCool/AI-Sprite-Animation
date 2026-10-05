@@ -209,7 +209,7 @@ namespace AISpriteAnimation
         /// of the first 1.5.0 draft): they are added once when the asset is loaded, existing presets are never touched.
         /// When a new animation type is added to the package, add its name here.
         /// </summary>
-        private static readonly string[] AddedAfterFirstRelease = { "Rotate", "Jump", "Sit", "Crouch", "CrouchWalk" };
+        private static readonly string[] AddedAfterFirstRelease = { "Rotate", "Jump", "Sit", "Crouch", "CrouchWalk", "WakeUp", "Ignite" };
 
         public bool AddMissingDefaultPresets()
         {
@@ -246,7 +246,17 @@ namespace AISpriteAnimation
             CreateSitPreset(),
             CreateCrouchPreset(),
             CreateCrouchWalkPreset(),
+            CreateWakeUpPreset(),
+            CreateIgnitePreset(),
         };
+
+        /// <summary>WakeUp: lying face down, pushing up, kneeling on one knee, rising, hand to the forehead, held (Rig, one-shot, 30 frames at 10 fps). The game places the character; the clip changes the pose only.</summary>
+        public static AnimationPreset CreateWakeUpPreset() =>
+            new AnimationPreset { name = "WakeUp", frames = 30, fps = 10, loop = false, poseKind = "wakeup", prompt = "waking up and getting to the feet" };
+
+        /// <summary>Ignite: the character raises the near hand palm up in front of her and it shivers; the last frame is held (Rig, one-shot, 10 frames at 12 fps). A flame effect is added by the game on the palm.</summary>
+        public static AnimationPreset CreateIgnitePreset() =>
+            new AnimationPreset { name = "Ignite", frames = 10, fps = 12, loop = false, poseKind = "ignite", prompt = "raising a palm, a flame appears" };
 
         /// <summary>CrouchWalk: the Crouch posture with the legs taking turns (Rig, loop, in place). The game moves the character.</summary>
         public static AnimationPreset CreateCrouchWalkPreset() =>

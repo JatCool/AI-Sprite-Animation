@@ -1,7 +1,7 @@
 {
   "name": "com.limpo.ai-sprite-animation",
   "displayName": "AI Sprite Animation",
-  "version": "1.7.0",
+  "version": "1.8.1",
   "unity": "6000.6",
   "unityRelease": "0f1",
   "description": "Animate a 2D sprite from a single image inside the Unity editor. Default Rig method moves the sprite's own pixels through a bone hierarchy (independent arms, legs, weapon; pixel-exact, instant). Optional beta AI Pose + Rig lets AI generate the motion (AnimateDiff video + SDPose pose estimation, via a local ComfyUI) while the rig still renders the original pixels; experimental AI Redraw redraws frames with AnimateDiff. Imports frames as sprites and builds an AnimationClip.",

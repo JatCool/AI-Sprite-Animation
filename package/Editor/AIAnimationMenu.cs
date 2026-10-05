@@ -18,6 +18,8 @@ namespace AISpriteAnimation
         [MenuItem("Assets/AI/Generate Animation/Sit", false, 2006)] private static void Sit() => RunPreset("Sit");
         [MenuItem("Assets/AI/Generate Animation/Crouch", false, 2007)] private static void Crouch() => RunPreset("Crouch");
         [MenuItem("Assets/AI/Generate Animation/CrouchWalk", false, 2008)] private static void CrouchWalk() => RunPreset("CrouchWalk");
+        [MenuItem("Assets/AI/Generate Animation/WakeUp", false, 2009)] private static void WakeUp() => RunPreset("WakeUp");
+        [MenuItem("Assets/AI/Generate Animation/Ignite", false, 2010)] private static void Ignite() => RunPreset("Ignite");
 
         [MenuItem("Assets/AI/Generate Animation/Idle", true)]
         [MenuItem("Assets/AI/Generate Animation/Walk", true)]
@@ -28,12 +30,14 @@ namespace AISpriteAnimation
         [MenuItem("Assets/AI/Generate Animation/Sit", true)]
         [MenuItem("Assets/AI/Generate Animation/Crouch", true)]
         [MenuItem("Assets/AI/Generate Animation/CrouchWalk", true)]
+        [MenuItem("Assets/AI/Generate Animation/WakeUp", true)]
+        [MenuItem("Assets/AI/Generate Animation/Ignite", true)]
         private static bool ValidateSelection() => !AIAnimationGenerator.IsRunning && SourceSprite.IsValidSelection(Selection.activeObject);
 
         [MenuItem("Tools/AI Sprite Animation/Generate Animation")]
         private static void OpenWindow() => AIAnimationWindow.Open();
 
-        [MenuItem("Assets/AI/Sprite Rig Editor", false, 2010)]
+        [MenuItem("Assets/AI/Sprite Rig Editor", false, 2011)]
         private static void OpenRigEditorFromAssets() => SpriteRigEditorWindow.Open(Selection.activeObject);
 
         [MenuItem("Assets/AI/Sprite Rig Editor", true)]

@@ -3,6 +3,21 @@
 All notable changes to this package are documented here. The project follows [Semantic Versioning](https://semver.org/):
 `MAJOR` = breaking changes (settings/workflow format, API), `MINOR` = backwards-compatible features, `PATCH` = fixes.
 
+## 1.8.1
+
+- **WakeUp redesigned** (30 frames @ 10 FPS, was 18): lying face down -> a breath -> hands in -> push-up -> both knees come under (hands and knees) -> the near foot steps forward (a deep lunge, the far knee on the ground) -> she rises with the back foot dragging -> stands unsteadily -> raises the near hand to her forehead (elbow high, head bowed) -> holds that pose for the last 2 keys. The game keeps the last frame while a line is spoken. Version 1 looked jerky (stop at every key) and let the back leg hang in the air.
+  * `RigAnimator.FromWorldKeys` has a `smooth` mode: a cubic Hermite curve through the keys (tangent zero at a local extreme, so it never overshoots a key). WakeUp uses it; Ignite keeps its ease-in/out.
+- **Longer Rig clips:** the 24-frame limit belongs to the ComfyUI workflow; a Rig clip may have up to `AIAnimationGenerator.RigMaxFrames` (120) frames.
+- Works with the character generator's new `rig --underlay-clothing` data (hidden pixels that continue the torso instead of bare skin); no package change was needed for that, but the fix is the reason Crouch/Jump of generated characters no longer show a bare patch on the back.
+
+## 1.8.0
+
+- **WakeUp preset** (Rig only, one-shot, 18 frames @ 10 FPS): the character lies face down (torso at -90 degrees, legs trailing), takes a breath, brings the hands in, pushes up, brings the knees under, steps one foot forward and rises to the standing rest pose (the Idle pose, so the clip hands over to Idle without a jump). The game places the character; the clip only changes the pose (the lowest foot or the body is pinned to the ground line by the renderer).
+- **Ignite preset** (Rig only, one-shot, 10 frames @ 12 FPS, the last frame is held): the character looks at the near hand, raises it palm up in front of her and the arm shivers a little (the power is not under control yet). The flame is a game effect placed on the palm of the last frame.
+  * `RigAnimator` kinds `wakeup` and `ignite` are driven by key tables in **world angles** (0 = hanging straight down, positive = swinging forward, 180 = up, in degrees; `FromWorldKeys` converts them to the rig's parent-relative angles). That is far easier to author for poses far from standing than parent-relative angles. Rig intensity is ignored for these two (the poses are exact). Default presets `WakeUp` and `Ignite` (added to `AddedAfterFirstRelease`, so existing settings assets receive them), right-click entries *AI > Generate Animation > WakeUp* and *Ignite*. AI Pose + Rig and AI Redraw refuse the presets with a clear message. The Sprite Rig Editor menu entry moved down by one order slot (2010 -> 2011) to make room.
+- **Renderer fix** (`SpriteRig.FillVacatedBody`, generated rigs with an underlay only): when a thigh swings beyond 65 degrees (kneeling, crouching) the cells it vacates are filled with the colour of the part pixel that used to be there (the trousers) instead of the nearest torso colour, which near the hips could be skin from the underlay. Rigs without an underlay (the player) take the old path unchanged and render byte-identically.
+- Used for the first generated character: Walk, Jump, Crouch, CrouchWalk, WakeUp and Ignite were all produced from its generated rig.
+
 ## 1.7.0
 
 - **Generated rig data** (optional, additive): a sprite can come with `rig/rig.json` (format `chargen-rig/1`), `rig/parts.png` and `rig/underlay.png` next to it, as written by the Local Character Generator (a separate repository). New `ChargenRigImporter` turns them into the sprite's ordinary rig asset:
