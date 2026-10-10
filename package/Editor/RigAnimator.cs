@@ -14,6 +14,9 @@ namespace AISpriteAnimation
         public readonly float[] angle = new float[RigDefinition.PartCount];
         public Vector2 root;     // intentional horizontal / vertical movement of the whole character, in sprite pixels (y down)
         public float hop;        // intentional lift off the ground in pixels (running, jumping); 0 = feet stay on the ground line
+        /// <summary>Whole-pixel translation of a part relative to its parent (y down), applied before its rotation; children follow. A shifted part moves with
+        /// its pixels unchanged (no re-sampling), the way pixel artists animate an idle; a shifted Body or Head stretches the seam it leaves (see SpriteRig).</summary>
+        public readonly Vector2Int[] shift = new Vector2Int[RigDefinition.PartCount];
 
         public float this[RigPart p] { get => angle[(int)p]; set => angle[(int)p] = value; }
         public void SetDegrees(RigPart p, float degrees) => angle[(int)p] = degrees * Mathf.Deg2Rad;
@@ -54,8 +57,13 @@ namespace AISpriteAnimation
                 case "sit": return Sit(t, n, k);
                 case "crouch": return Crouch(t, n, k);
                 case "crouchwalk": return CrouchWalk(t, n, k);
-                case "wakeup": return FromWorldKeys(WakeUpKeys, t, n, false, true);
+                case "wakeup": return WakeUp(t, n);
                 case "ignite": return FromWorldKeys(IgniteKeys, t, n, true);
+                case "lowerhand": return FromWorldKeys(LowerHandKeys, t, n, false, true);
+                case "dash": return Dash(t, n);
+                case "hurt": return FromWorldKeys(HurtKeys, t, n, false, true);
+                case "leanoncolumn": return LeanOnColumn(t, n);
+                case "reachcolumn": return FromWorldKeys(ReachColumnKeys, t, n, false, true);
                 default: return new RigPose();   // rest pose
             }
         }
@@ -90,18 +98,31 @@ namespace AISpriteAnimation
             return p;
         }
 
-        // ---- idle: breathing, tiny weight shift, hair and weapon settle ----
+        // ---- idle (version 4): one breath per loop, the way pixel artists draw an idle (modelled on a hand-made 12-frame reference at 100 ms; 24 @ 20 by
+        // default): the upper body RISES by one whole pixel and nothing but the hair is rotated, so every pixel stays as drawn. Overlapping action as a ripple:
+        // on the way up the head leads, the chest follows, the hands come last; on the way down the head goes first, then the chest, the hands lag. The hair
+        // sways continuously and flicks behind every head move (the part that profits from a higher frame rate). The legs never move. Frame 0 is the rest
+        // pose (other clips blend into it). Whole-pixel moves are RigPose.shift (a shifted Body or Head stretches its seam, see SpriteRig). Keys are fractions
+        // of the cycle, so any frame count samples the same timing.
+        // v1 turned the torso ~1 degree (jitter); v2 dipped the upper body through the knees as one block (mechanical); v3 was this at 12 @ 10 with a stepped hair.
+        private const float IdleHeadUp = 0.30f, IdleChestUp = 0.36f, IdleHandsUp = 0.42f, IdleHeadDown = 0.70f, IdleChestDown = 0.74f, IdleHandsDown = 0.80f;
+
         private static RigPose Idle(int t, int n, float k)
         {
-            float ph = 2f * Mathf.PI * t / n;
-            float b = Mathf.Sin(ph);
+            float u = n > 0 ? (t % n) / (float)n : 0f;
+            bool head = u >= IdleHeadUp && u < IdleHeadDown, chest = u >= IdleChestUp && u < IdleChestDown, hands = u >= IdleHandsUp && u < IdleHandsDown;
             var p = new RigPose();
-            p.SetDegrees(RigPart.Body, 1.2f * k * b);
-            p.SetDegrees(RigPart.Head, -0.8f * k * b);
-            p.SetDegrees(RigPart.Hair, -4f * k * Mathf.Cos(ph - 0.5f));
-            p.SetDegrees(RigPart.ArmNearUpper, (3f + 2.5f * b) * k); p.SetDegrees(RigPart.ArmNearLower, (8f + 2f * b) * k);
-            p.SetDegrees(RigPart.ArmFarUpper, (-3f - 2f * b) * k); p.SetDegrees(RigPart.ArmFarLower, 6f * k);
-            p.SetDegrees(RigPart.Weapon, -(3f + 8f) * 0.5f * k + 2.5f * k * b);
+            int headY = head ? -1 : 0, chestY = chest ? -1 : 0, handsY = hands ? -1 : 0;
+            p.shift[(int)RigPart.Body] = new Vector2Int(0, chestY);
+            p.shift[(int)RigPart.Head] = new Vector2Int(0, headY - chestY);                      // relative to the chest it rides on
+            p.shift[(int)RigPart.ArmNearUpper] = p.shift[(int)RigPart.ArmFarUpper] = new Vector2Int(0, handsY - chestY);
+            // the ponytail: a slow sway plus a flick that trails each head move and settles
+            float Flick(float since) => since < 0f ? 0f : Mathf.Exp(-since / 0.07f) * Mathf.Sin(since / 0.07f * 1.6f + 1.2f);
+            float hair = 5f * Mathf.Sin(2f * Mathf.PI * u) + 7f * Flick(u - IdleHeadUp) - 7f * Flick(u - IdleHeadDown);   // a ~10 px ponytail needs ~6 degrees per pixel at its tip
+            p.SetDegrees(RigPart.Hair, hair * k);
+            p.SetDegrees(RigPart.ArmNearUpper, 3f * k); p.SetDegrees(RigPart.ArmNearLower, 8f * k);
+            p.SetDegrees(RigPart.ArmFarUpper, -3f * k); p.SetDegrees(RigPart.ArmFarLower, 6f * k);
+            p.SetDegrees(RigPart.Weapon, -(3f + 8f) * 0.5f * k);
             p.SetDegrees(RigPart.LegNearUpper, 4f); p.SetDegrees(RigPart.LegNearLower, -3f); p.SetDegrees(RigPart.FootNear, -1f);
             p.SetDegrees(RigPart.LegFarUpper, -5f); p.SetDegrees(RigPart.LegFarLower, -3f); p.SetDegrees(RigPart.FootFar, 7f);
             return p;
@@ -296,28 +317,70 @@ namespace AISpriteAnimation
             return p;
         }
 
-        // WakeUp (one-shot, 30 frames at 10 fps, smooth curves through the keys): lying face down, a breath, the hands come in, she pushes up, both knees come under
-        // (hands and knees), the near foot steps forward (a deep lunge, the far knee on the ground), she rises with the back foot dragging, stands unsteadily, raises the near hand to her forehead (elbow high, head
-        // bowed) and holds that pose (the last 2 keys are the hold: the game plays the first dialogue line while it lasts, then returns to Idle).
+        // WakeUp (one-shot, 72 frames at 12 fps = 6 s, smooth curves through the keys; version 3, modelled on a pixel-art wake-up reference):
+        //   0-11  lying face down, breathing, a hand twitches (the first sign of life)
+        //  12-21  the head lifts a little, the hands slide in beside the ribs, the elbows rise
+        //  22-33  the near knee, then the far knee, slide under her; she pushes the floor away
+        //  34-42  hands and knees: head hanging, her back rocks with every breath
+        //  43-49  the near foot steps forward (a lunge, the far knee still on the floor)
+        //  50-58  she rises hunched, the back foot drags in, arms hanging, head down
+        //  59-64  standing, swaying, the head slowly comes up
+        //  65-71  the near hand goes to her forehead (elbow high, head bowed) and is held (the last 3 frames are the hold: the game plays the first line while it lasts, then Idle)
         // Lying: the torso is rotated -90 (clockwise: the head leads to the right, the face looks at the ground), the legs trail backwards (-88).
         // The renderer pins the lowest foot to the ground line, so every phase keeps a foot, a knee or a shin on the ground (no leg hangs in the air behind the body).
+        // Breathing, the twitch and the rocking are added on top of the keys in WakeUp().
+        public const int WakeUpFrames = 72;
+        private static float F(int frame) => frame / (float)(WakeUpFrames - 1);
+
         private static readonly float[][] WakeUpKeys =
         {
-            //          u    body  head  hair   upN   loN   upF   loF   thN   shN   ftN   thF   shF   ftF  hop rX rY
-            new[] { 0.00f,  -90f,  -90f,  0f,  -84f,  -84f,  -96f,  -96f,  -88f,  -88f,  -88f,  -92f,  -92f,  -92f, 0f, 0f, 0f },
-            new[] { 0.07f,  -89f,  -86f,  2f,  -82f,  -80f,  -95f,  -93f,  -88f,  -88f,  -88f,  -91f,  -91f,  -91f, 0f, 0f, 0f },
-            new[] { 0.19f,  -86f,  -78f,  8f,  -50f,   -5f,  -70f,  -20f,  -87f,  -87f,  -87f,  -90f,  -90f,  -90f, 0f, 0f, 0f },
-            new[] { 0.30f,  -66f,  -46f, 10f,    6f,    3f,   14f,    8f,  -84f,  -84f,  -84f,  -88f,  -88f,  -88f, 0f, 0f, 0f },
-            new[] { 0.40f,  -58f,  -40f,  8f,   10f,    6f,   14f,    8f,  -50f,  -92f,  -92f,  -54f,  -92f,  -92f, 0f, 0f, 0f },
-            new[] { 0.49f,  -76f,  -52f,  6f,    4f,    2f,    8f,    4f,    4f,  -90f,  -90f,    6f,  -90f,  -90f, 0f, 0f, 0f },
-            new[] { 0.54f,  -64f,  -42f,  6f,   10f,   12f,   16f,   14f,   42f,  -62f,  -62f,    4f,  -90f,  -90f, 0f, 0f, 0f },
-            new[] { 0.59f,  -46f,  -28f,  6f,   20f,   26f,   26f,   22f,   84f,  -12f,    0f,    4f,  -90f,  -90f, 0f, 0f, 0f },
-            new[] { 0.70f,  -24f,  -12f,  5f,   24f,   32f,   30f,   34f,   46f,   -4f,    0f,  -18f,  -34f,  -20f, 0f, 0f, 0f },
-            new[] { 0.79f,   -8f,   -8f,  3f,   20f,   26f,   16f,   22f,   14f,    0f,    0f,   -2f,  -16f,  -12f, 0f, 0f, 0f },
-            new[] { 0.86f,   -3f,  -14f,  3f,   70f,  120f,   -5f,    3f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
-            new[] { 0.93f,    0f,  -10f,  3f,  108f,  162f,   -5f,    3f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
-            new[] { 1.00f,    0f,   -9f,  3f,  110f,  165f,   -5f,    3f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
+            //                u    body  head  hair   upN   loN   upF   loF   thN   shN   ftN   thF   shF   ftF  hop rX rY
+            new[] { F(0),   -90f,  -90f,  0f,  -70f,   75f,  -78f,   70f,  -88f,  -88f,  -88f,  -92f,  -92f,  -92f, 0f, 0f, 0f },
+            new[] { F(11),  -90f,  -88f,  2f,  -70f,   75f,  -78f,   70f,  -88f,  -88f,  -88f,  -92f,  -92f,  -92f, 0f, 0f, 0f },
+            new[] { F(17),  -89f,  -80f,  6f,  -96f,   45f, -100f,   40f,  -88f,  -88f,  -88f,  -92f,  -92f,  -92f, 0f, 0f, 0f },
+            new[] { F(22),  -87f,  -72f,  8f, -126f,   14f, -130f,   18f,  -86f,  -88f,  -88f,  -91f,  -91f,  -91f, 0f, 0f, 0f },
+            // 24-34: the push-up. Her hands stay PLANTED on the floor while the torso rises: for every key the arm angles were computed from the rig (arm 5.7 + 4.7 px, thigh 9.8, torso 9.7,
+            // knee 2.5 px above the floor, hand 2 px): hip height H = 2.5 + thigh * cos(thigh angle), shoulder height S = H + torso * sin(body + 90), the hand directly under the shoulder at
+            // distance d = S - 2, upper arm = -acos((a^2 + d^2 - b^2) / 2ad), forearm = +acos((b^2 + d^2 - a^2) / 2bd). On hands and knees a horizontal back is the best case (S = 12 = the arm's reach),
+            // and measured on the rendered frames that still left the hands 4-5 px above the floor (version 4), so from frame 31 the torso tips nose-down (body -113 degrees, head -98):
+            // the shoulders drop about 4 px and the hands touch the floor (gap 0-1 px, version 5; version 3 held the back 12 degrees up: "pushing up from nothing").
+            new[] { F(24),  -87f,  -71f,  8f,  -55f,   97f,  -58f,   95f,  -80f,  -90f,  -90f,  -86f,  -91f,  -91f, 0f, 0f, 0f },
+            new[] { F(26),  -86f,  -70f,  8f,  -50f,   69f,  -52f,   66f,  -65f,  -92f,  -92f,  -80f,  -92f,  -92f, 0f, 0f, 0f },
+            new[] { F(28),  -95f,  -76f,  8f,  -34f,   43f,  -36f,   41f,  -40f,  -92f,  -92f,  -56f,  -92f,  -92f, 0f, 0f, 0f },
+            new[] { F(31),  -104f,  -88f,  9f,  -15f,   18f,  -16f,   16f,  -15f,  -92f,  -92f,  -28f,  -92f,  -92f, 0f, 0f, 0f },
+            new[] { F(34),  -113f,  -98f, 10f,  -14f,   17f,  -15f,   16f,    4f,  -90f,  -90f,    4f,  -90f,  -90f, 0f, 0f, 0f },
+            new[] { F(38),  -114f,  -100f,  9f,  -13f,   16f,  -14f,   15f,    5f,  -90f,  -90f,    5f,  -90f,  -90f, 0f, 0f, 0f },
+            new[] { F(42),  -113f,  -98f,  9f,  -14f,   17f,  -15f,   16f,    6f,  -90f,  -90f,    5f,  -90f,  -90f, 0f, 0f, 0f },
+            new[] { F(44),  -108f,  -95f,  8f,   -13f,   16f,   -14f,   15f,   8f,  -86f,  -84f,    4f,  -90f,  -90f, 0f, 0f, 0f },
+            new[] { F(46),  -76f,  -60f,  8f,    4f,    8f,    6f,   10f,   34f,  -52f,  -42f,    4f,  -90f,  -90f, 0f, 0f, 0f },
+            new[] { F(49),  -44f,  -30f,  6f,   20f,   28f,   24f,   26f,   86f,  -14f,    0f,    4f,  -90f,  -90f, 0f, 0f, 0f },
+            new[] { F(54),  -24f,  -16f,  5f,   26f,   32f,   28f,   32f,   46f,   -4f,    0f,  -18f,  -34f,  -20f, 0f, 0f, 0f },
+            new[] { F(58),   -9f,  -14f,  4f,   14f,   20f,   14f,   20f,   14f,    0f,    0f,   -2f,  -16f,  -12f, 0f, 0f, 0f },
+            new[] { F(62),   -3f,  -10f,  3f,    6f,   10f,   -2f,    6f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
+            new[] { F(65),    0f,   -4f,  3f,   30f,   60f,   -5f,    4f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
+            new[] { F(68),    0f,   -9f,  3f,  100f,  150f,   -5f,    3f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
+            new[] { F(71),    0f,   -9f,  3f,  110f,  165f,   -5f,    3f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
         };
+
+        // Key pose plus life: the breathing of the lying body, the twitch of a hand, the rocking on hands and knees, the sway of the first steps of standing.
+        // All of it is added to the body (its children, the head and the upper arms, follow it) and eased in and out, so no key pose is disturbed.
+        private static RigPose WakeUp(int t, int n)
+        {
+            RigPose p = FromWorldKeys(WakeUpKeys, t, n, false, true);
+            float f = n > 1 ? t / (float)(n - 1) * (WakeUpFrames - 1) : 0f;
+            float Window(float from, float to, float ease) => Mathf.Clamp01((f - from) / ease) * Mathf.Clamp01((to - f) / ease);
+
+            float breath = 2.6f * Mathf.Sin(f * 2f * Mathf.PI / 9f) * Window(-1f, 24f, 4f);                 // lying: a slow breath that lifts the back
+            breath += 1.2f * Mathf.Sin((f - 34f) * 2f * Mathf.PI / 8f) * Window(34f, 43f, 3f);                // hands and knees: she gasps, the back rocks
+            breath += 1.6f * Mathf.Sin((f - 59f) * 2f * Mathf.PI / 10f) * Window(58f, 66f, 3f);               // standing: she sways
+            p.angle[(int)RigPart.Body] += breath * Mathf.Deg2Rad;
+            p.angle[(int)RigPart.Head] -= breath * 0.6f * Mathf.Deg2Rad;                                      // the head lags behind the back
+            p.angle[(int)RigPart.Hair] -= breath * 0.8f * Mathf.Deg2Rad;
+
+            float twitch = 9f * Mathf.Sin((f - 6f) * Mathf.PI / 1.5f) * Window(5f, 10f, 1.5f);               // the near hand twitches: two quick flicks
+            p.angle[(int)RigPart.ArmNearLower] += twitch * Mathf.Deg2Rad;
+            return p;
+        }
 
         // Ignite (one-shot, 10 frames at 12 fps, the last frame is the held pose): she looks at her right hand, raises it palm up in front of her, and it shivers.
         // The flame itself is a game effect placed on the palm of the last frame.
@@ -329,6 +392,92 @@ namespace AISpriteAnimation
             new[] { 0.44f,    4f,  -10f,  3f,   45f,   95f,   12f,   55f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
             new[] { 0.70f,    3f,  -12f,  3f,   40f,   92f,   12f,   55f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
             new[] { 1.00f,    3f,  -12f,  3f,   42f,   96f,   12f,   55f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
+        };
+
+        // LowerHand (one-shot, 10 frames at 12 fps, smooth): the end of Ignite. The flame has died down; the raised hand sinks back to her side, the head comes up and she
+        // stands as in Idle. The first key is Ignite's held pose, the last one its first pose, so Ignite -> LowerHand -> Idle never jumps.
+        private static readonly float[][] LowerHandKeys =
+        {
+            //          u    body  head  hair   upN   loN   upF   loF   thN   shN   ftN   thF   shF   ftF  hop rX rY
+            new[] { 0.00f,    3f,  -12f,  3f,   42f,   96f,   12f,   55f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
+            new[] { 0.30f,    3f,  -10f,  2f,   38f,   70f,   10f,   42f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },   // the forearm drops first
+            new[] { 0.60f,    1f,   -5f,  1f,   20f,   34f,    2f,   18f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
+            new[] { 0.85f,    0f,   -1f,  0f,    8f,   18f,   -4f,    5f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
+            new[] { 1.00f,    0f,    0f,  0f,    5f,   15f,   -5f,    3f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
+        };
+
+        // Dash (a fire dash; one-shot, 8 frames at 20 fps, the last frames are the held lunge): a short dip, then a running leap forward: the torso leans in, the near knee
+        // is driven up and forward, the far leg stretches back, both arms are swept back, the hair streams behind. Lifted off the ground (hop) so the stretched back leg
+        // does not pin the body down. The held frames flutter (hair and arms), so a dash that lasts longer than the clip still looks alive.
+        private static readonly float[][] DashKeys =
+        {
+            //          u    body  head  hair   upN   loN   upF   loF   thN   shN   ftN   thF   shF   ftF  hop rX rY
+            new[] { 0.00f,    0f,    0f,   0f,    5f,   15f,   -5f,    3f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },
+            new[] { 0.15f,  -10f,   -6f,  -4f,   22f,   40f,   18f,   35f,   26f,  -18f,    0f,  -10f,  -32f,  -20f, 0f, 0f, 0f },   // anticipation: a dip, arms forward
+            new[] { 0.35f,  -24f,  -14f, -22f,  -40f,  -20f,  -55f,  -40f,   62f,  -12f,    8f,  -34f,  -60f,  -55f, 2f, 2f, 0f },   // launch
+            new[] { 0.55f,  -30f,  -18f, -32f,  -58f,  -36f,  -72f,  -52f,   74f,   -8f,   12f,  -44f,  -70f,  -62f, 3f, 3f, 0f },   // the lunge
+            new[] { 1.00f,  -30f,  -18f, -36f,  -60f,  -38f,  -74f,  -54f,   72f,   -8f,   12f,  -44f,  -70f,  -62f, 3f, 3f, 0f },   // held
+        };
+
+        // ReachColumn (one-shot, 12 frames at 12 fps, smooth): the bridge from the end of WakeUp to LeanOnColumn. The hand leaves the forehead and the forearm unfolds
+        // forward, she reaches out while the torso starts to tilt and the far leg slides back, then the palm settles on the stone and the head drops. The first key is
+        // WakeUp's last pose and the last key LeanOnColumn's first pose, so WakeUp -> ReachColumn -> LeanOnColumn never jumps.
+        private static readonly float[][] ReachColumnKeys =
+        {
+            //          u    body  head  hair   upN   loN   upF   loF   thN   shN   ftN   thF   shF   ftF  hop rX rY
+            new[] { 0.00f,    0f,   -9f,   3f,  110f,  165f,   -5f,    3f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f, 0f, 0f },   // = WakeUp's last pose
+            new[] { 0.30f,   -3f,  -13f,   1f,   88f,  110f,   -6f,    2f,    6f,    2f,    0f,   -8f,  -12f,  -12f, 0f, 0f, 0f },   // the hand comes off the forehead
+            new[] { 0.60f,   -9f,  -22f,  -6f,   74f,   78f,  -10f,   -2f,    7f,    2f,    0f,  -15f,  -19f,  -16f, 0f, 0f, 0f },   // reaching out, tilting in
+            new[] { 0.85f,  -14f,  -31f, -12f,   77f,   81f,  -13f,   -5f,    8f,    2f,    0f,  -20f,  -24f,  -19f, 0f, 0f, 0f },   // the palm on the stone
+            new[] { 1.00f,  -16f,  -34f, -14f,   76f,   80f,  -14f,   -6f,    8f,    2f,    0f,  -22f,  -26f,  -20f, 0f, 0f, 0f },   // = LeanOnColumn's first pose
+        };
+
+        // LeanOnColumn (loop, 8 frames at 6 fps): she has just got up and leans on a column in front of her (the side she faces), the near arm straight out at
+        // shoulder height with the palm flat on the stone, the body tilted towards it, the head hanging, the far leg a little back; one slow breath per loop
+        // (the chest and head sink and rise, the arm takes it back so the palm stays on the column).
+        private static readonly float[][] LeanOnColumnKeys =
+        {
+            //          u    body  head  hair   upN   loN   upF   loF   thN   shN   ftN   thF   shF   ftF  hop rX rY
+            new[] { 0.00f,  -16f,  -34f, -14f,   76f,   80f,  -14f,   -6f,    8f,    2f,    0f,  -22f,  -26f,  -20f, 0f, 0f, 0f },
+            new[] { 1.00f,  -16f,  -34f, -14f,   76f,   80f,  -14f,   -6f,    8f,    2f,    0f,  -22f,  -26f,  -20f, 0f, 0f, 0f },
+        };
+
+        private static RigPose LeanOnColumn(int t, int n)
+        {
+            RigPose p = FromWorldKeys(LeanOnColumnKeys, t, n);
+            float breath = Mathf.Sin(2f * Mathf.PI * t / Mathf.Max(1, n));   // one breath per loop
+            p.angle[(int)RigPart.Body] += -2.5f * breath * Mathf.Deg2Rad;          // the chest sinks towards the column...
+            p.angle[(int)RigPart.Head] += -2.5f * breath * Mathf.Deg2Rad;          // ...the head hangs a little lower...
+            p.angle[(int)RigPart.Hair] += 1.5f * breath * Mathf.Deg2Rad;
+            p.angle[(int)RigPart.ArmNearUpper] += 2.5f * breath * Mathf.Deg2Rad;   // ...and the arm takes it back, so the palm stays put
+            p.angle[(int)RigPart.ArmNearLower] += 3f * breath * Mathf.Deg2Rad;     // the elbow gives a little
+            p.angle[(int)RigPart.ArmFarLower] += 4f * breath * Mathf.Deg2Rad;      // the free hand hangs loose
+            return p;
+        }
+
+        private static RigPose Dash(int t, int n)
+        {
+            RigPose p = FromWorldKeys(DashKeys, t, n, false, true);
+            float u = n > 1 ? t / (float)(n - 1) : 0f;
+            if (u > 0.5f)   // the held lunge flutters: the hair and the trailing arms catch the rush of air
+            {
+                float w = Mathf.Sin(t * 2.7f);
+                p.angle[(int)RigPart.Hair] += 4f * w * Mathf.Deg2Rad;
+                p.angle[(int)RigPart.ArmFarLower] += 3f * Mathf.Sin(t * 2.7f + 1f) * Mathf.Deg2Rad;
+            }
+            return p;
+        }
+
+        // Hurt (one-shot, 8 frames at 16 fps, smooth): she is hit from the front: the torso and head snap back, the near arm comes up to guard, the knees give, she is
+        // pushed back a little, then recovers to the standing pose (first = last pose, so it blends into Idle).
+        private static readonly float[][] HurtKeys =
+        {
+            //          u    body  head  hair   upN   loN   upF   loF   thN   shN   ftN   thF   shF   ftF  hop rX rY
+            new[] { 0.00f,    0f,    0f,   0f,    5f,   15f,   -5f,    3f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f,  0f, 0f },
+            new[] { 0.14f,   16f,   26f,  22f,   62f,  118f,   40f,   92f,   16f,  -10f,    0f,  -16f,  -26f,  -10f, 0f, -2f, 0f },   // the blow: snap back, arm up
+            new[] { 0.35f,   12f,   18f,  14f,   58f,  110f,   34f,   80f,   20f,  -16f,    0f,  -18f,  -30f,  -10f, 0f, -2f, 0f },   // recoil, knees give
+            new[] { 0.65f,    4f,    6f,   4f,   26f,   50f,   10f,   30f,   12f,   -4f,    0f,  -10f,  -16f,  -10f, 0f, -1f, 0f },
+            new[] { 1.00f,    0f,    0f,   0f,    5f,   15f,   -5f,    3f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f,  0f, 0f },
         };
 
         // ---- crouch walk (goose-step walk): the held crouch pose, with the legs taking turns (loop) ----

@@ -20,6 +20,11 @@ namespace AISpriteAnimation
         [MenuItem("Assets/AI/Generate Animation/CrouchWalk", false, 2008)] private static void CrouchWalk() => RunPreset("CrouchWalk");
         [MenuItem("Assets/AI/Generate Animation/WakeUp", false, 2009)] private static void WakeUp() => RunPreset("WakeUp");
         [MenuItem("Assets/AI/Generate Animation/Ignite", false, 2010)] private static void Ignite() => RunPreset("Ignite");
+        [MenuItem("Assets/AI/Generate Animation/LowerHand", false, 2010)] private static void LowerHand() => RunPreset("LowerHand");
+        [MenuItem("Assets/AI/Generate Animation/Dash", false, 2010)] private static void Dash() => RunPreset("Dash");
+        [MenuItem("Assets/AI/Generate Animation/Hurt", false, 2010)] private static void Hurt() => RunPreset("Hurt");
+        [MenuItem("Assets/AI/Generate Animation/LeanOnColumn", false, 2010)] private static void LeanOnColumn() => RunPreset("LeanOnColumn");
+        [MenuItem("Assets/AI/Generate Animation/ReachColumn", false, 2010)] private static void ReachColumn() => RunPreset("ReachColumn");
 
         [MenuItem("Assets/AI/Generate Animation/Idle", true)]
         [MenuItem("Assets/AI/Generate Animation/Walk", true)]
@@ -32,6 +37,11 @@ namespace AISpriteAnimation
         [MenuItem("Assets/AI/Generate Animation/CrouchWalk", true)]
         [MenuItem("Assets/AI/Generate Animation/WakeUp", true)]
         [MenuItem("Assets/AI/Generate Animation/Ignite", true)]
+        [MenuItem("Assets/AI/Generate Animation/LowerHand", true)]
+        [MenuItem("Assets/AI/Generate Animation/Dash", true)]
+        [MenuItem("Assets/AI/Generate Animation/Hurt", true)]
+        [MenuItem("Assets/AI/Generate Animation/LeanOnColumn", true)]
+        [MenuItem("Assets/AI/Generate Animation/ReachColumn", true)]
         private static bool ValidateSelection() => !AIAnimationGenerator.IsRunning && SourceSprite.IsValidSelection(Selection.activeObject);
 
         [MenuItem("Tools/AI Sprite Animation/Generate Animation")]

@@ -53,6 +53,15 @@ namespace AISpriteAnimation
             RigPart.ArmNearUpper, RigPart.ArmNearLower, RigPart.Weapon,
         };
 
+        private static readonly RigPart[] StretchParts = { RigPart.Body, RigPart.Head };   // parts whose whole-pixel shift stretches the seam it opens
+
+        private static bool InSubtree(int part, int ancestor)
+        {
+            for (int p = part; p >= 0; p = Parent[p])
+                if (p == ancestor) return true;
+            return false;
+        }
+
         internal static readonly RigPart[] GroundParts = { RigPart.LegNearUpper, RigPart.LegNearLower, RigPart.FootNear, RigPart.LegFarUpper, RigPart.LegFarLower, RigPart.FootFar };
         private static readonly RigPart[] OverlayParts = { RigPart.ArmNearUpper, RigPart.ArmNearLower, RigPart.ArmFarUpper, RigPart.ArmFarLower };
 
@@ -159,6 +168,8 @@ namespace AISpriteAnimation
             int hi = cells * Upscale;
             var hiColor = new Color32[hi * hi];
             var hiOwner = new byte[hi * hi];
+            var ghostColor = new Color32[hi * hi];
+            var ghostOwner = new byte[hi * hi];
             var result = new List<Color32[]>(poses.Count);
             var world = new Affine[RigDefinition.PartCount];
 
@@ -167,7 +178,7 @@ namespace AISpriteAnimation
                 // Hierarchical transforms: world(part) = world(parent) o rotation about the part's pivot.
                 for (int p = 0; p < RigDefinition.PartCount; p++)
                 {
-                    Affine local = Affine.RotateAbout(pivot[p], pose.angle[p]);
+                    Affine local = Local(pivot[p], pose, p);
                     world[p] = Parent[p] < 0 ? local : world[Parent[p]].Multiply(local);
                 }
 
@@ -189,6 +200,25 @@ namespace AISpriteAnimation
 
                 Array.Clear(hiColor, 0, hiColor.Length);
                 Array.Clear(hiOwner, 0, hiOwner.Length);
+                // stretch: a shifted Body or Head (with everything attached to it, e.g. the hair on the head) is also drawn as it would be without its own
+                // shift, kept aside; after composing, that copy fills only the seam the shift opened (the waist above the legs, the neck and the hair's
+                // edge under a lifted head), as a pixel artist stretches a torso or a neck by one pixel
+                bool stretched = false;
+                foreach (RigPart s in StretchParts)
+                {
+                    int si = (int)s;
+                    if (pose.shift[si] == Vector2Int.zero) continue;
+                    if (!stretched) { Array.Clear(ghostColor, 0, ghostColor.Length); Array.Clear(ghostOwner, 0, ghostOwner.Length); stretched = true; }
+                    Affine rot = Affine.RotateAbout(pivot[si], pose.angle[si]);
+                    Affine unshifted = Parent[si] < 0 ? rot : world[Parent[si]].Multiply(rot);
+                    Affine toUnshifted = unshifted.Multiply(world[si].Inverse());
+                    foreach (RigPart part in DrawOrder)
+                    {
+                        int pi = (int)part;
+                        if (pixels[pi].Count == 0 || !InSubtree(pi, si)) continue;
+                        DrawPart(root.Multiply(toUnshifted.Multiply(world[pi])), pi, part == RigPart.Body ? bodySrc : src, mask, sw, sh, minB[pi], maxB[pi], placeLeft, placeTop, hi, ghostColor, ghostOwner);
+                    }
+                }
                 foreach (RigPart part in DrawOrder)
                 {
                     int pi = (int)part;
@@ -200,6 +230,7 @@ namespace AISpriteAnimation
                 FillVacatedBody(grid, owner, cells, pixels, m[(int)RigPart.Body], sw, placeLeft, placeTop, OverlayParts);
                 if (Mathf.Abs(pose.angle[(int)RigPart.LegNearUpper]) > DeepThighRadians || Mathf.Abs(pose.angle[(int)RigPart.LegFarUpper]) > DeepThighRadians)
                     FillVacatedBody(grid, owner, cells, pixels, m[(int)RigPart.Body], sw, placeLeft, placeTop, ThighParts, rig.HasUnderlay ? src : null);
+                if (stretched) FillSeams(grid, Downsample(ghostColor, ghostOwner, hi, cells, out _), cells);
                 CloseHoles(grid, cells);
 
                 // y-down -> bottom-left origin, undoing the mirror for left-facing sprites.
@@ -237,6 +268,7 @@ namespace AISpriteAnimation
             {
                 var p = new RigPose { root = poses[i].root, hop = poses[i].hop };
                 Array.Copy(poses[i].angle, p.angle, p.angle.Length);
+                Array.Copy(poses[i].shift, p.shift, p.shift.Length);
                 foreach (RigPart leg in GroundParts) p[leg] *= k;
                 if (run)
                 {
@@ -247,6 +279,14 @@ namespace AISpriteAnimation
                 scaled[i] = p;
             }
             return scaled;
+        }
+
+        /// <summary>A part's transform relative to its parent: its whole-pixel shift after the rotation about its pivot.</summary>
+        internal static Affine Local(Vector2 pivot, RigPose pose, int part)
+        {
+            Affine r = Affine.RotateAbout(pivot, pose.angle[part]);
+            Vector2Int s = pose.shift[part];
+            return s == Vector2Int.zero ? r : Affine.Translate(s.x, s.y).Multiply(r);
         }
 
         // Inverse mapping: every destination sub-pixel looks up the source pixel it came from, so rotated parts have no holes.
@@ -366,6 +406,21 @@ namespace AISpriteAnimation
         }
 
         // A transparent cell with at least 3 opaque 4-neighbours is a seam between parts: fill it with a neighbour's colour.
+        /// <summary>Fills an empty cell from the unshifted copy of a shifted part only where it closes a seam: the cell has opaque cells directly above and
+        /// below. Cells at the silhouette's edge stay empty, so a stretch never sticks out (the head's outline row behind a lifted ponytail, for one).</summary>
+        private static void FillSeams(Color32[] g, Color32[] ghost, int n)
+        {
+            var fill = new List<int>();
+            for (int y = 1; y < n - 1; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    int i = y * n + x;
+                    if (g[i].a != 0 || ghost[i].a == 0) continue;
+                    if (g[i - n].a != 0 && g[i + n].a != 0) fill.Add(i);
+                }
+            foreach (int i in fill) g[i] = ghost[i];
+        }
+
         private static void CloseHoles(Color32[] g, int n)
         {
             var fill = new List<(int, Color32)>();

@@ -3,6 +3,33 @@
 All notable changes to this package are documented here. The project follows [Semantic Versioning](https://semver.org/):
 `MAJOR` = breaking changes (settings/workflow format, API), `MINOR` = backwards-compatible features, `PATCH` = fixes.
 
+## 1.11.0
+
+- **Whole-pixel part shifts: `RigPose.shift`** (per part, relative to its parent, applied after its rotation; children follow). A shifted part moves with its pixels exactly as drawn (no re-sampling). A shifted `Body` or `Head` stretches the seam it opens: the part and its subtree are also drawn without the shift into a separate buffer, and `SpriteRig.FillSeams` copies from it only into empty cells that have opaque cells directly above and below (the waist above the legs, the neck, the hair's edge under a lifted head), so a stretch never adds pixels to the silhouette's edge. `RigKinematics` uses the same local transform. Every existing animation has zero shifts and renders exactly as before.
+- **Idle version 4**, modelled on a hand-made 12-frame pixel-art idle at 100 ms per frame (and the usual rules: 1-2 s per breath, about 1 px of motion in whole-pixel steps, holds, secondary motion): the upper body rises 1 px and is never rotated (only the hair is); overlapping action as a ripple (up: head, chest, hands; down: head, chest, hands, 50-100 ms apart); the ponytail sways continuously (+-5 degrees: a ~10 px ponytail needs ~6 degrees to move its tip a pixel) and flicks behind every head move, which is what the higher frame rate shows (15 distinct ponytail states in 24 frames); the legs never move. Keys are fractions of the cycle (any frame count). A version 3 at 12 @ 10 with a stepped hair was reviewed by the game's author, who asked for more frames. Measured on a generated 48 px character: rest frames pixel-identical, exact 1 px shifts per region in the keyed frames, no gaps (no empty cell between two opaque ones in any frame), original palette only. Version 1 turned the torso ~1 degree (no whole-pixel motion, up to ~280 re-sampled pixels per frame); a version 2 (never released) dipped the whole upper body through the knees as one block (clean pixels, but mechanical).
+- Default `Idle` preset is now 24 @ 20 (1.2 s; was 8 @ 12 = 0.67 s, which read as panting). Existing settings assets keep their values: edit the preset to 24 @ 20. Regenerate Idle clips to get version 4.
+
+## 1.10.0
+
+- **New animation kinds `LeanOnColumn` (Rig only, loop, 8 @ 6) and `ReachColumn` (Rig only, one-shot, 12 @ 12, the smooth bridge from WakeUp's last pose into the lean):** leaning on a column in front of the character, the near palm flat on it at shoulder height, head hanging, one slow breath per loop. Pose keys in `RigAnimator` (`LeanOnColumnKeys` + a breathing sine), preset added to `AddedAfterFirstRelease`, menu entry. `tools/posetests` not extended.
+
+## 1.9.0
+
+- **Three new animation kinds (Rig only, smooth key curves): `LowerHand`, `Dash`, `Hurt`.** LowerHand ends Ignite (the hand sinks back to standing, 10 @ 12); Dash is a running leap for a dash ability (dip, then knee up, back leg stretched, arms swept back, hair streaming, held and fluttering; 8 @ 20); Hurt is a flinch from a hit (snap back, guarding arm, knees give, recover; 8 @ 16). Pose keys in `RigAnimator` (world-angle tables through `FromWorldKeys` with the smooth Hermite option), presets added to `AddedAfterFirstRelease` (existing settings assets receive them), menu entries, and the Rig-only guard in `AIAnimationGenerator`. Verified by generating all three on a generated character (one pivot per clip, palette unchanged, frames looked at). `tools/posetests` was not extended in this release.
+
+## 1.8.4
+
+- **WakeUp version 5: the chest bows so the planted hands really touch the floor.** Measured on the rendered frames (the lowest skin pixel against the lowest pixel of the sprite), version 4 still left the hands 4-5 px above the floor on hands and knees: the arms are as long as the thigh, so with the back horizontal the shoulders are higher than the arms reach. The torso now tips nose-down (body -113 .. -114 degrees, the head hangs 12-15 degrees above the torso line) between frames 31 and 42, which lowers the shoulders by about 4 px; the gap is now 0-1 px in frames 34-42 (was 5). Frames 28-31 ease into it, and frames 44-46 ease out of it (the push-off no longer pops the body into the air in one frame). Regenerate WakeUp clips to get it.
+
+## 1.8.3
+
+- **WakeUp version 4: the hands stay on the floor during the push-up.** In version 3 the torso was held 12 degrees above horizontal on hands and knees, and the short arms (about the length of the thigh) did not reach the floor: the hands hung 4-8 px in the air ("pushing up from nothing"). The keys between frames 24 and 44 were recomputed from the rig's proportions (arm 5.7 + 4.7 px, thigh 9.8, torso 9.7, knee 2.5 px and hand 2 px above the floor): hip height H = 2.5 + thigh cos(thigh angle), shoulder height S = H + torso sin(body + 90), the hand directly under the shoulder (distance S - 2), upper arm = -acos((a^2 + d^2 - b^2) / 2ad), forearm = +acos((b^2 + d^2 - a^2) / 2bd). On hands and knees the back is now horizontal (the shoulder is at the arm's reach). The breathing rock on hands and knees is smaller (1.2 degrees). Other phases are unchanged. Regenerate WakeUp clips to get it.
+
+## 1.8.2
+
+- **WakeUp version 3** (72 frames @ 12 FPS = 6 s, was 30 @ 10), modelled on a pixel-art wake-up reference: lying face down with a breath and a twitching hand, the head lifts and the hands slide in beside the ribs, the near then the far knee slide under, a push-up to hands and knees where the back rocks with every breath, the near foot steps forward (lunge), a hunched rise with the back foot dragging, standing and swaying with the head slowly coming up, then the near hand to the forehead (held, same final pose as before). The key table is indexed by frame number (`F(n)`); `RigAnimator.WakeUp` adds breathing, the hand twitch, the rocking and the sway on top of the keys (eased in and out, so no key pose is disturbed).
+- Default `WakeUp` preset is now 72 @ 12; existing settings assets keep their old preset values (edit the preset, or the game's asset, to 72 @ 12).
+
 ## 1.8.1
 
 - **WakeUp redesigned** (30 frames @ 10 FPS, was 18): lying face down -> a breath -> hands in -> push-up -> both knees come under (hands and knees) -> the near foot steps forward (a deep lunge, the far knee on the ground) -> she rises with the back foot dragging -> stands unsteadily -> raises the near hand to her forehead (elbow high, head bowed) -> holds that pose for the last 2 keys. The game keeps the last frame while a line is spoken. Version 1 looked jerky (stop at every key) and let the back leg hang in the air.

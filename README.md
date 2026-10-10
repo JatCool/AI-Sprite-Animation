@@ -141,7 +141,7 @@ Assets/AIAnimations/<Sprite>/<Animation>/
 ```
 
 Beside the sprite: `<Sprite>_Rig.asset` (joints, per-pixel part map, ground line) and, for AI Pose + Rig, `<Sprite>_<Animation>_AIPose.asset` (the final poses and a quantitative validation report).
-Defaults: Idle 8 frames @ 12 fps, Walk 8 @ 12, Run 8 @ 14, Attack 10 @ 12, Rotate 18 @ 12, Jump 10 @ 12, Sit 8 @ 12, Crouch 6 @ 12, CrouchWalk 8 @ 12. Frame count is free (2-24).
+Defaults: Idle 24 frames @ 20 fps, Walk 8 @ 12, Run 8 @ 14, Attack 10 @ 12, Rotate 18 @ 12, Jump 10 @ 12, Sit 8 @ 12, Crouch 6 @ 12, CrouchWalk 8 @ 12. Frame count is free (2-24).
 
 ## Configuration
 

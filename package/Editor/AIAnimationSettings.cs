@@ -209,7 +209,7 @@ namespace AISpriteAnimation
         /// of the first 1.5.0 draft): they are added once when the asset is loaded, existing presets are never touched.
         /// When a new animation type is added to the package, add its name here.
         /// </summary>
-        private static readonly string[] AddedAfterFirstRelease = { "Rotate", "Jump", "Sit", "Crouch", "CrouchWalk", "WakeUp", "Ignite" };
+        private static readonly string[] AddedAfterFirstRelease = { "Rotate", "Jump", "Sit", "Crouch", "CrouchWalk", "WakeUp", "Ignite", "LowerHand", "Dash", "Hurt", "LeanOnColumn", "ReachColumn" };
 
         public bool AddMissingDefaultPresets()
         {
@@ -233,7 +233,7 @@ namespace AISpriteAnimation
 
         public static List<AnimationPreset> CreateDefaultPresets() => new List<AnimationPreset>
         {
-            new AnimationPreset { name = "Idle", frames = 8, fps = 12, loop = true, poseKind = "idle", poseStrength = 1.8f, denoise = 0.8f,
+            new AnimationPreset { name = "Idle", frames = 24, fps = 20, loop = true, poseKind = "idle", poseStrength = 1.8f, denoise = 0.8f,
                 controlNetStrength = 0.6f, tileEndPercent = 0.6f, ipAdapterWeight = 1.0f, prompt = "idle, standing, breathing" },
             new AnimationPreset { name = "Walk", frames = 8, fps = 12, loop = true, poseKind = "walk", poseStrength = 2.1f, denoise = 0.92f,
                 controlNetStrength = 0.5f, tileEndPercent = 0.6f, ipAdapterWeight = 1.0f, prompt = "walk cycle, walking" },
@@ -248,11 +248,36 @@ namespace AISpriteAnimation
             CreateCrouchWalkPreset(),
             CreateWakeUpPreset(),
             CreateIgnitePreset(),
+            CreateLowerHandPreset(),
+            CreateDashPreset(),
+            CreateHurtPreset(),
+            CreateLeanOnColumnPreset(),
+            CreateReachColumnPreset(),
         };
 
-        /// <summary>WakeUp: lying face down, pushing up, kneeling on one knee, rising, hand to the forehead, held (Rig, one-shot, 30 frames at 10 fps). The game places the character; the clip changes the pose only.</summary>
+        /// <summary>ReachColumn: the bridge from the end of WakeUp (hand on the forehead) to LeanOnColumn: the hand comes down and reaches out, the palm settles on the column (Rig, one-shot, 12 frames at 12 fps, smooth).</summary>
+        public static AnimationPreset CreateReachColumnPreset() =>
+            new AnimationPreset { name = "ReachColumn", frames = 12, fps = 12, loop = false, poseKind = "reachcolumn", prompt = "reaching out to lean on a column" };
+
+        /// <summary>LeanOnColumn: she leans on a column in front of her, palm flat on it at shoulder height, head hanging, one slow breath per loop (Rig, loop, 8 frames at 6 fps).</summary>
+        public static AnimationPreset CreateLeanOnColumnPreset() =>
+            new AnimationPreset { name = "LeanOnColumn", frames = 8, fps = 6, loop = true, poseKind = "leanoncolumn", prompt = "leaning on a column, catching breath" };
+
+        /// <summary>LowerHand: the end of Ignite, the raised hand sinks back and she stands as in Idle (Rig, one-shot, 10 frames at 12 fps, smooth).</summary>
+        public static AnimationPreset CreateLowerHandPreset() =>
+            new AnimationPreset { name = "LowerHand", frames = 10, fps = 12, loop = false, poseKind = "lowerhand", prompt = "lowering the raised hand" };
+
+        /// <summary>Dash: a short dip, then a running leap forward (knee driven up, back leg stretched, arms swept back); the last frames are held (Rig, one-shot, 8 frames at 20 fps).</summary>
+        public static AnimationPreset CreateDashPreset() =>
+            new AnimationPreset { name = "Dash", frames = 8, fps = 20, loop = false, poseKind = "dash", prompt = "dashing forward" };
+
+        /// <summary>Hurt: hit from the front, snaps back with an arm up, recovers to standing (Rig, one-shot, 8 frames at 16 fps, smooth).</summary>
+        public static AnimationPreset CreateHurtPreset() =>
+            new AnimationPreset { name = "Hurt", frames = 8, fps = 16, loop = false, poseKind = "hurt", prompt = "getting hit, flinching" };
+
+        /// <summary>WakeUp: lying face down, pushing up, a hunched rise, hand to the forehead, held (Rig, one-shot, 72 frames at 12 fps). The game places the character; the clip changes the pose only.</summary>
         public static AnimationPreset CreateWakeUpPreset() =>
-            new AnimationPreset { name = "WakeUp", frames = 30, fps = 10, loop = false, poseKind = "wakeup", prompt = "waking up and getting to the feet" };
+            new AnimationPreset { name = "WakeUp", frames = 72, fps = 12, loop = false, poseKind = "wakeup", prompt = "waking up and getting to the feet" };
 
         /// <summary>Ignite: the character raises the near hand palm up in front of her and it shivers; the last frame is held (Rig, one-shot, 10 frames at 12 fps). A flame effect is added by the game on the palm.</summary>
         public static AnimationPreset CreateIgnitePreset() =>

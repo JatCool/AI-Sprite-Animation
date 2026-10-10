@@ -42,7 +42,7 @@ namespace AISpriteAnimation
             var world = new SpriteRig.Affine[RigDefinition.PartCount];
             for (int p = 0; p < world.Length; p++)
             {
-                var local = SpriteRig.Affine.RotateAbout(rig.GetJoint(SpriteRig.Pivot[p]), pose.angle[p]);
+                var local = SpriteRig.Local(rig.GetJoint(SpriteRig.Pivot[p]), pose, p);
                 world[p] = SpriteRig.Parent[p] < 0 ? local : world[SpriteRig.Parent[p]].Multiply(local);
             }
             return world;

@@ -126,13 +126,14 @@ and `legSwingScale` (initialised to 1; `EffectiveLegSwingScale` turns 0, negativ
 `Clone()` copies both.
 
 **Frame rendering (`SpriteRig.Render`)**, per pose:
-1. Compute world matrices from the pose angles.
+1. Compute world matrices from the pose angles and the whole-pixel part shifts (`RigPose.shift`, 1.11.0: a part's translation relative to its parent, applied after its rotation; children follow; zero for every animation except Idle).
 2. **Grounding:** the lowest corner of all leg/foot pixels is moved onto `groundY`; root offset is rounded to whole pixels; `RigPose.hop` is the only intentional lift. This is why feet do not drift.
 3. Draw parts back-to-front by **inverse mapping** at 4x sub-pixels (each destination sub-pixel looks up its source pixel, so rotation leaves no holes).
 4. **Majority vote** per output pixel over its 4x4 sub-pixels -> only original colours, hard edges.
 5. `FillVacatedBody`: where an arm drawn over the torso swung away, fill the hole with the nearest body colour. Then `CloseHoles` (1-pixel seams).
    With an underlay (1.7.0) those pixels were already drawn as Body pixels in step 3 (underlay colours, beneath the arm), so there is usually nothing left to fill.
    Without an underlay `bodySrc` is `src` and the code path is the 1.6.0 one (verified byte-identical, see section 9).
+5b. **Stretch (1.11.0):** a shifted `Body` or `Head` (with its subtree: the hair rides on the head) is also drawn without its own shift into a separate buffer; `FillSeams` copies from it only into empty cells with opaque cells directly above and below, i.e. the seam the shift opened (the waist, the neck, the hair's edge). Edge cells stay empty, so a stretch never sticks out (the first version drew the unshifted copy beneath and left a 1 px bar behind the shoulder; drawing only the head and not its hair left a gap there instead).
 6. Mirror back for left-facing sprites (verified to be an exact mirror).
 
 **Sign convention** (documented on `RigPose`; easy to get wrong): angles are **counter-clockwise positive on screen (y down)**. A limb hanging down swings *forward*, a forward-pointing sword tip goes *up*,
