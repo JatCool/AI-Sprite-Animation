@@ -25,6 +25,7 @@ namespace AISpriteAnimation
         [MenuItem("Assets/AI/Generate Animation/Hurt", false, 2010)] private static void Hurt() => RunPreset("Hurt");
         [MenuItem("Assets/AI/Generate Animation/LeanOnColumn", false, 2010)] private static void LeanOnColumn() => RunPreset("LeanOnColumn");
         [MenuItem("Assets/AI/Generate Animation/ReachColumn", false, 2010)] private static void ReachColumn() => RunPreset("ReachColumn");
+        [MenuItem("Assets/AI/Generate Animation/ClimbDown", false, 2010)] private static void ClimbDown() => RunPreset("ClimbDown");
 
         [MenuItem("Assets/AI/Generate Animation/Idle", true)]
         [MenuItem("Assets/AI/Generate Animation/Walk", true)]
@@ -42,6 +43,7 @@ namespace AISpriteAnimation
         [MenuItem("Assets/AI/Generate Animation/Hurt", true)]
         [MenuItem("Assets/AI/Generate Animation/LeanOnColumn", true)]
         [MenuItem("Assets/AI/Generate Animation/ReachColumn", true)]
+        [MenuItem("Assets/AI/Generate Animation/ClimbDown", true)]
         private static bool ValidateSelection() => !AIAnimationGenerator.IsRunning && SourceSprite.IsValidSelection(Selection.activeObject);
 
         [MenuItem("Tools/AI Sprite Animation/Generate Animation")]
@@ -52,6 +54,21 @@ namespace AISpriteAnimation
 
         [MenuItem("Assets/AI/Sprite Rig Editor", true)]
         private static bool ValidateRigEditor() => SourceSprite.IsValidSelection(Selection.activeObject);
+
+        /// <summary>Builds the selected sprite's rig from "&lt;Sprite&gt;_joints.txt" next to it (format: -aiRigJoints): for views the auto rig cannot read, such as a back view.</summary>
+        [MenuItem("Assets/AI/Rig From Joints File", false, 2012)]
+        private static void RigFromJointsFile()
+        {
+            var settings = AIAnimationSettings.GetOrCreate();
+            if (!SourceSprite.TryResolve(Selection.activeObject, settings, out SourceSprite source, out string error)) { EditorUtility.DisplayDialog(Title, error, "OK"); return; }
+            string path = AssetDatabase.GetAssetPath(Selection.activeObject);
+            string joints = System.IO.Path.ChangeExtension(path, null) + "_joints.txt";
+            if (!System.IO.File.Exists(joints)) { EditorUtility.DisplayDialog(Title, "No joints file: " + joints, "OK"); return; }
+            Debug.Log("[AI Sprite Animation] Rig written: " + AssetDatabase.GetAssetPath(BatchRunner.RigFromJoints(source, settings, joints)));
+        }
+
+        [MenuItem("Assets/AI/Rig From Joints File", true)]
+        private static bool ValidateRigFromJoints() => SourceSprite.IsValidSelection(Selection.activeObject);
 
         [MenuItem("Tools/AI Sprite Animation/Select Settings Asset")]
         private static void SelectSettings()

@@ -3,6 +3,13 @@
 All notable changes to this package are documented here. The project follows [Semantic Versioning](https://semver.org/):
 `MAJOR` = breaking changes (settings/workflow format, API), `MINOR` = backwards-compatible features, `PATCH` = fixes.
 
+## 1.12.0
+
+- **ClimbDown** animation type (Rig only, loop, 8 @ 8) for a **back-view** sprite: down a ladder that faces the camera, the character's back to the viewer (how platformers show a front-facing ladder). The classic back-view climb (Mega Man and the like): one arm straight up to a rung, the other bent with the elbow out and the hand at the face, the opposite knee lifted; each pose is held and the sides swap quickly (a raised knee in a back view only shortens the leg: the whole leg rises by whole pixels, `RigPose.shift`). Pose kind `climbdown`, preset `ClimbDown` (added to existing settings assets), menu *Assets > AI > Generate Animation > ClimbDown*. Side-view drafts were rejected by the game's author: a side view does not fit a front-facing ladder.
+- **Rigs from a joints file in the editor**: *Assets > AI > Rig From Joints File* builds the selected sprite's rig from `<Sprite>_joints.txt` next to it (the `-aiRigJoints` format; shared code `BatchRunner.RigFromJoints`).
+- **Part lines in joints files** (`RigDefinition.ApplyPartLines`, also in `tools/riglab`): `part <Part> x0 y0 x1 y1` gives every opaque pixel in the box to one part, `remap <FromPart> <ToPart> x0 y0 x1 y1` moves one part's pixels; applied in order after the automatic assignment. Needed for views the automatic assignment cannot read (a back view: two separate legs, arms beside the torso).
+- Every other animation renders exactly as before.
+
 ## 1.11.0
 
 - **Whole-pixel part shifts: `RigPose.shift`** (per part, relative to its parent, applied after its rotation; children follow). A shifted part moves with its pixels exactly as drawn (no re-sampling). A shifted `Body` or `Head` stretches the seam it opens: the part and its subtree are also drawn without the shift into a separate buffer, and `SpriteRig.FillSeams` copies from it only into empty cells that have opaque cells directly above and below (the waist above the legs, the neck, the hair's edge under a lifted head), so a stretch never adds pixels to the silhouette's edge. `RigKinematics` uses the same local transform. Every existing animation has zero shifts and renders exactly as before.

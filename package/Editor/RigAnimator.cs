@@ -64,6 +64,7 @@ namespace AISpriteAnimation
                 case "hurt": return FromWorldKeys(HurtKeys, t, n, false, true);
                 case "leanoncolumn": return LeanOnColumn(t, n);
                 case "reachcolumn": return FromWorldKeys(ReachColumnKeys, t, n, false, true);
+                case "climbdown": return ClimbDown(t, n);
                 default: return new RigPose();   // rest pose
             }
         }
@@ -441,6 +442,34 @@ namespace AISpriteAnimation
             new[] { 0.00f,  -16f,  -34f, -14f,   76f,   80f,  -14f,   -6f,    8f,    2f,    0f,  -22f,  -26f,  -20f, 0f, 0f, 0f },
             new[] { 1.00f,  -16f,  -34f, -14f,   76f,   80f,  -14f,   -6f,    8f,    2f,    0f,  -22f,  -26f,  -20f, 0f, 0f, 0f },
         };
+
+        // ClimbDown (loop, 8 frames at 8 fps), for a BACK-VIEW sprite: down a ladder that faces the camera, the character's back to the viewer (how platformers
+        // show a front-facing ladder). "Near" = the arm and leg on the right of the screen, "far" = the left ones. The classic back-view climb (Mega Man and the like): one arm
+        // straight up to a rung above the head, the other bent with the elbow out and the hand at the face, hands on the rungs at shoulder width; the opposite knee lifted (in a back view a raised knee only shortens the leg: the whole leg is moved up by whole
+        // pixels, RigPose.shift, never re-sampled); each pose is held and the sides swap quickly. The renderer keeps the lowest foot on the ground line; the game moves the
+        // character down. Versions 1-3 were side views (a side view does not fit a front-facing ladder) and version 4 spread the arms in a V to the rails; all rejected by the game's author, 2026-10-11.
+        // Arm angles are world angles (positive = counter-clockwise on screen: the right arm rises outwards with +, the left one with -).
+        private static readonly float[][] ClimbDownKeys =
+        {
+            //          u    body  head  hair   upN   loN   upF   loF   thN   shN   ftN   thF   shF   ftF  hop rX rY
+            new[] { 0.00f,    2f,    3f,   0f,  172f,  178f,  -95f, -172f,    0f,    0f,    0f,   -8f,    2f,    0f, 0f, 0f, 0f },   // right hand straight up on a rung, left elbow out, hand at the face; left knee up
+            new[] { 0.30f,    2f,    3f,   0f,  172f,  178f,  -95f, -172f,    0f,    0f,    0f,   -8f,    2f,    0f, 0f, 0f, 0f },   // held
+            new[] { 0.50f,   -2f,   -3f,   0f,   95f,  172f, -172f, -178f,    8f,   -2f,    0f,    0f,    0f,    0f, 0f, 0f, 0f },   // swapped: left hand up, right knee up
+            new[] { 0.80f,   -2f,   -3f,   0f,   95f,  172f, -172f, -178f,    8f,   -2f,    0f,    0f,    0f,    0f, 0f, 0f, 0f },   // held
+            new[] { 1.00f,    2f,    3f,   0f,  172f,  178f,  -95f, -172f,    0f,    0f,    0f,   -8f,    2f,    0f, 0f, 0f, 0f },   // = the first
+        };
+        private const int ClimbKneeLift = 4;   // pixels the lifted leg rises
+
+        private static RigPose ClimbDown(int t, int n)
+        {
+            RigPose p = FromWorldKeys(ClimbDownKeys, t, n + 1, false, true);   // a loop: n + 1 so the last frame stops one step short of the first
+            // how much of the first pose is in this frame (1 while it is held, 0 while the second one is), so the knees swap with the hands
+            float u = t / (float)Mathf.Max(1, n);
+            float first = u <= 0.3f ? 1f : u <= 0.5f ? Mathf.SmoothStep(1f, 0f, (u - 0.3f) / 0.2f) : u <= 0.8f ? 0f : Mathf.SmoothStep(0f, 1f, (u - 0.8f) / 0.2f);
+            p.shift[(int)RigPart.LegFarUpper] = new Vector2Int(0, -Mathf.RoundToInt(ClimbKneeLift * first));
+            p.shift[(int)RigPart.LegNearUpper] = new Vector2Int(0, -Mathf.RoundToInt(ClimbKneeLift * (1f - first)));
+            return p;
+        }
 
         private static RigPose LeanOnColumn(int t, int n)
         {

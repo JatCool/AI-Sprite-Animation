@@ -209,7 +209,7 @@ namespace AISpriteAnimation
         /// of the first 1.5.0 draft): they are added once when the asset is loaded, existing presets are never touched.
         /// When a new animation type is added to the package, add its name here.
         /// </summary>
-        private static readonly string[] AddedAfterFirstRelease = { "Rotate", "Jump", "Sit", "Crouch", "CrouchWalk", "WakeUp", "Ignite", "LowerHand", "Dash", "Hurt", "LeanOnColumn", "ReachColumn" };
+        private static readonly string[] AddedAfterFirstRelease = { "Rotate", "Jump", "Sit", "Crouch", "CrouchWalk", "WakeUp", "Ignite", "LowerHand", "Dash", "Hurt", "LeanOnColumn", "ReachColumn", "ClimbDown" };
 
         public bool AddMissingDefaultPresets()
         {
@@ -253,7 +253,12 @@ namespace AISpriteAnimation
             CreateHurtPreset(),
             CreateLeanOnColumnPreset(),
             CreateReachColumnPreset(),
+            CreateClimbDownPreset(),
         };
+
+        /// <summary>ClimbDown: for a back-view sprite, down a ladder that faces the camera: hands and knees taking turns on the rungs (Rig, loop, 8 frames at 8 fps; the game moves the character down).</summary>
+        public static AnimationPreset CreateClimbDownPreset() =>
+            new AnimationPreset { name = "ClimbDown", frames = 8, fps = 8, loop = true, poseKind = "climbdown", prompt = "climbing down a ladder, seen from behind" };
 
         /// <summary>ReachColumn: the bridge from the end of WakeUp (hand on the forehead) to LeanOnColumn: the hand comes down and reaches out, the palm settles on the column (Rig, one-shot, 12 frames at 12 fps, smooth).</summary>
         public static AnimationPreset CreateReachColumnPreset() =>

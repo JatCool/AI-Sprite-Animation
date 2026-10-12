@@ -1,7 +1,7 @@
 using AISpriteAnimation;
 using UnityEngine;
 // usage: riglab src.raw out.raw anim frames cycle intensity cells facingLeft [joints.txt]
-// joints.txt lines: '<Joint> x y', 'ground y', and 'remap <FromPart> <ToPart> x0 y0 x1 y1' (pixels of FromPart inside the box (top-left origin, inclusive) become ToPart: a rig refinement without the editor)
+// joints.txt lines: '<Joint> x y', 'ground y', 'part <Part> x0 y0 x1 y1' (every opaque pixel in the box becomes Part) and 'remap <FromPart> <ToPart> x0 y0 x1 y1' (pixels of FromPart in the box become ToPart); boxes inclusive, top-left origin, applied in order (RigDefinition.ApplyPartLines)
 var a = args;
 var raw = File.ReadAllBytes(a[0]);
 int sw = BitConverter.ToInt32(raw, 0), sh = BitConverter.ToInt32(raw, 4);
@@ -19,16 +19,7 @@ if (a.Length > 8 && File.Exists(a[8]))
         if (t.Length == 2 && t[0] == "ground") rig.groundY = float.Parse(t[1], System.Globalization.CultureInfo.InvariantCulture);
     }
     RigAutoBuilder.AssignParts(rig, sprite, sw, sh, RigAutoParams.Default);
-    foreach (var line in File.ReadAllLines(a[8]))
-    {
-        var t = line.Split(new[]{' ','\t'}, StringSplitOptions.RemoveEmptyEntries);
-        if (t.Length == 7 && t[0] == "remap" && Enum.TryParse<RigPart>(t[1], out var from) && Enum.TryParse<RigPart>(t[2], out var to))
-        {
-            int x0 = int.Parse(t[3]), y0 = int.Parse(t[4]), x1 = int.Parse(t[5]), y1 = int.Parse(t[6]);
-            for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++)
-                if (rig.HasPart(x, y, from)) rig.SetMask(x, y, (ushort)(1 << (int)to));
-        }
-    }
+    rig.ApplyPartLines(File.ReadAllLines(a[8]));
 }
 var poses = ProceduralRigPoses.Instance.GetPoses(anim, frames, cycle, k);
 int l = (cells - sw) / 2, b = (cells - sh) / 2;

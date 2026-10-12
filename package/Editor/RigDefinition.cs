@@ -62,6 +62,28 @@ namespace AISpriteAnimation
         public Vector2 GetJoint(RigJoint j) => joints[(int)j];
         public void SetJoint(RigJoint j, Vector2 p) => joints[(int)j] = p;
 
+        /// <summary>
+        /// Part-map lines of a joints file, applied in order after the automatic assignment (later lines win): "part &lt;Part&gt; x0 y0 x1 y1" gives every opaque pixel in
+        /// the box (inclusive, top-left origin) to that part only; "remap &lt;FromPart&gt; &lt;ToPart&gt; x0 y0 x1 y1" moves only the pixels of FromPart. For views the
+        /// automatic assignment cannot read (a back view: two separate legs, arms beside the torso).
+        /// </summary>
+        public void ApplyPartLines(string[] lines)
+        {
+            foreach (string line in lines)
+            {
+                string[] t = line.Split(new[] { ' ', '	' }, StringSplitOptions.RemoveEmptyEntries);
+                bool part = t.Length == 6 && t[0] == "part", remap = t.Length == 7 && t[0] == "remap";
+                if (!part && !remap) continue;
+                if (!Enum.TryParse(t[1], out RigPart to) || (remap && !Enum.TryParse(t[2], out to))) continue;
+                RigPart from = remap && Enum.TryParse(t[1], out RigPart f) ? f : to;
+                int o = remap ? 3 : 2, x0 = int.Parse(t[o]), y0 = int.Parse(t[o + 1]), x1 = int.Parse(t[o + 2]), y1 = int.Parse(t[o + 3]);
+                for (int y = Math.Max(0, y0); y <= Math.Min(height - 1, y1); y++)
+                    for (int x = Math.Max(0, x0); x <= Math.Min(width - 1, x1); x++)
+                        if (GetMask(x, y) != 0 && (part || HasPart(x, y, from)))
+                            SetMask(x, y, (ushort)(1 << (int)to));
+            }
+        }
+
         /// <summary>Bit mask of the parts of pixel (x, y) (y down). 0 = the pixel has no part (transparent).</summary>
         public ushort GetMask(int x, int y)
         {

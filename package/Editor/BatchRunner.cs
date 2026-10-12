@@ -17,6 +17,26 @@ namespace AISpriteAnimation
     public static class BatchRunner
     {
         // In-memory overrides for experiments: -aiOverride "denoise=0.8,poseStrength=1.4,ipAdapterWeight=1,noiseType=constant,paddingPercent=50"
+        /// <summary>Builds or refreshes the rig of a sprite from a joints file ("JointName x y" per line in sprite pixels, y down; "ground y"); the parts are then
+        /// assigned automatically. Used by -aiRigJoints and by Assets > AI > Rig From Joints File.</summary>
+        public static SpriteRigAsset RigFromJoints(SourceSprite rigSource, AIAnimationSettings settings, string jointsPath)
+        {
+            var rigAsset = SpriteRigAsset.FindFor(rigSource, settings) ?? SpriteRigAsset.CreateAuto(rigSource, settings);
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            foreach (string line in System.IO.File.ReadAllLines(jointsPath))
+            {
+                string[] t = line.Split(new[] { ' ', '	' }, StringSplitOptions.RemoveEmptyEntries);
+                if (t.Length == 3 && Enum.TryParse(t[0], out RigJoint joint)) rigAsset.definition.SetJoint(joint, new Vector2(float.Parse(t[1], inv), float.Parse(t[2], inv)));
+                else if (t.Length == 2 && t[0] == "ground") rigAsset.definition.groundY = float.Parse(t[1], inv);
+            }
+            Color32[] rigPixels = SpriteFrameProcessor.LoadSpritePixels(rigSource, out int rsw, out int rsh);
+            RigAutoBuilder.AssignParts(rigAsset.definition, rigPixels, rsw, rsh, settings.AutoRigParams());
+            rigAsset.definition.ApplyPartLines(System.IO.File.ReadAllLines(jointsPath));
+            rigAsset.Commit();
+            AssetDatabase.SaveAssets();
+            return rigAsset;
+        }
+
         private static AIAnimationSettings CloneWithOverrides(AIAnimationSettings source, string spec, string presetName)
         {
             var s = UnityEngine.Object.Instantiate(source);
@@ -168,18 +188,7 @@ namespace AISpriteAnimation
             if (Arg("-aiRigJoints") != null)
             {
                 if (!SourceSprite.TryResolve(source, settings, out SourceSprite rigSource, out string rigError)) { Debug.LogError("[AI Sprite Animation] " + rigError); EditorApplication.Exit(1); return; }
-                var rigAsset = SpriteRigAsset.FindFor(rigSource, settings) ?? SpriteRigAsset.CreateAuto(rigSource, settings);
-                foreach (string line in System.IO.File.ReadAllLines(Arg("-aiRigJoints")))
-                {
-                    string[] t = line.Split(new[] { ' ', '	' }, StringSplitOptions.RemoveEmptyEntries);
-                    var inv = System.Globalization.CultureInfo.InvariantCulture;
-                    if (t.Length == 3 && Enum.TryParse(t[0], out RigJoint joint)) rigAsset.definition.SetJoint(joint, new Vector2(float.Parse(t[1], inv), float.Parse(t[2], inv)));
-                    else if (t.Length == 2 && t[0] == "ground") rigAsset.definition.groundY = float.Parse(t[1], inv);
-                }
-                Color32[] rigPixels = SpriteFrameProcessor.LoadSpritePixels(rigSource, out int rsw, out int rsh);
-                RigAutoBuilder.AssignParts(rigAsset.definition, rigPixels, rsw, rsh, settings.AutoRigParams());
-                rigAsset.Commit();
-                AssetDatabase.SaveAssets();
+                var rigAsset = RigFromJoints(rigSource, settings, Arg("-aiRigJoints"));
                 Debug.Log("[AI Sprite Animation] Rig written: " + AssetDatabase.GetAssetPath(rigAsset));
                 if (Arg("-aiRigOnly") != null) { EditorApplication.Exit(0); return; }
             }
