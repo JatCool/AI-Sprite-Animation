@@ -3,6 +3,11 @@
 All notable changes to this package are documented here. The project follows [Semantic Versioning](https://semver.org/):
 `MAJOR` = breaking changes (settings/workflow format, API), `MINOR` = backwards-compatible features, `PATCH` = fixes.
 
+## 1.13.0
+
+- **StaggerShock** animation type (Rig only, one-shot, 8 @ 12, smooth keys, the last frame held): a jolt of shock at something seen: torso and head jerk back, both hands come half up in front of the chest, the far foot steps half a step back, the near knee gives, then frozen. Unlike Hurt there is no guarding arm and no recovery. Pose kind `staggershock` (`StaggerShockKeys` through `FromWorldKeys`), preset `StaggerShock` (added to existing settings assets), menu *Assets > AI > Generate Animation > StaggerShock*, Rig-only guard. `tools/posetests` not extended.
+- Every other animation renders exactly as before.
+
 ## 1.12.0
 
 - **ClimbDown** animation type (Rig only, loop, 8 @ 8) for a **back-view** sprite: down a ladder that faces the camera, the character's back to the viewer (how platformers show a front-facing ladder). The classic back-view climb (Mega Man and the like): one arm straight up to a rung, the other bent with the elbow out and the hand at the face, the opposite knee lifted; each pose is held and the sides swap quickly (a raised knee in a back view only shortens the leg: the whole leg rises by whole pixels, `RigPose.shift`). Pose kind `climbdown`, preset `ClimbDown` (added to existing settings assets), menu *Assets > AI > Generate Animation > ClimbDown*. Side-view drafts were rejected by the game's author: a side view does not fit a front-facing ladder.

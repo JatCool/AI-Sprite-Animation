@@ -209,7 +209,7 @@ namespace AISpriteAnimation
         /// of the first 1.5.0 draft): they are added once when the asset is loaded, existing presets are never touched.
         /// When a new animation type is added to the package, add its name here.
         /// </summary>
-        private static readonly string[] AddedAfterFirstRelease = { "Rotate", "Jump", "Sit", "Crouch", "CrouchWalk", "WakeUp", "Ignite", "LowerHand", "Dash", "Hurt", "LeanOnColumn", "ReachColumn", "ClimbDown" };
+        private static readonly string[] AddedAfterFirstRelease = { "Rotate", "Jump", "Sit", "Crouch", "CrouchWalk", "WakeUp", "Ignite", "LowerHand", "Dash", "Hurt", "LeanOnColumn", "ReachColumn", "ClimbDown", "StaggerShock" };
 
         public bool AddMissingDefaultPresets()
         {
@@ -254,7 +254,12 @@ namespace AISpriteAnimation
             CreateLeanOnColumnPreset(),
             CreateReachColumnPreset(),
             CreateClimbDownPreset(),
+            CreateStaggerShockPreset(),
         };
+
+        /// <summary>StaggerShock: a jolt of shock: torso and head jerk back, hands half up, half a step back, then frozen (Rig, one-shot, 8 frames at 12 fps, the last frame is held).</summary>
+        public static AnimationPreset CreateStaggerShockPreset() =>
+            new AnimationPreset { name = "StaggerShock", frames = 8, fps = 12, loop = false, poseKind = "staggershock", prompt = "staggering back in shock" };
 
         /// <summary>ClimbDown: for a back-view sprite, down a ladder that faces the camera: hands and knees taking turns on the rungs (Rig, loop, 8 frames at 8 fps; the game moves the character down).</summary>
         public static AnimationPreset CreateClimbDownPreset() =>

@@ -26,6 +26,7 @@ namespace AISpriteAnimation
         [MenuItem("Assets/AI/Generate Animation/LeanOnColumn", false, 2010)] private static void LeanOnColumn() => RunPreset("LeanOnColumn");
         [MenuItem("Assets/AI/Generate Animation/ReachColumn", false, 2010)] private static void ReachColumn() => RunPreset("ReachColumn");
         [MenuItem("Assets/AI/Generate Animation/ClimbDown", false, 2010)] private static void ClimbDown() => RunPreset("ClimbDown");
+        [MenuItem("Assets/AI/Generate Animation/StaggerShock", false, 2010)] private static void StaggerShock() => RunPreset("StaggerShock");
 
         [MenuItem("Assets/AI/Generate Animation/Idle", true)]
         [MenuItem("Assets/AI/Generate Animation/Walk", true)]
@@ -44,6 +45,7 @@ namespace AISpriteAnimation
         [MenuItem("Assets/AI/Generate Animation/LeanOnColumn", true)]
         [MenuItem("Assets/AI/Generate Animation/ReachColumn", true)]
         [MenuItem("Assets/AI/Generate Animation/ClimbDown", true)]
+        [MenuItem("Assets/AI/Generate Animation/StaggerShock", true)]
         private static bool ValidateSelection() => !AIAnimationGenerator.IsRunning && SourceSprite.IsValidSelection(Selection.activeObject);
 
         [MenuItem("Tools/AI Sprite Animation/Generate Animation")]

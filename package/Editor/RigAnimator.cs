@@ -65,6 +65,7 @@ namespace AISpriteAnimation
                 case "leanoncolumn": return LeanOnColumn(t, n);
                 case "reachcolumn": return FromWorldKeys(ReachColumnKeys, t, n, false, true);
                 case "climbdown": return ClimbDown(t, n);
+                case "staggershock": return FromWorldKeys(StaggerShockKeys, t, n, false, true);
                 default: return new RigPose();   // rest pose
             }
         }
@@ -507,6 +508,18 @@ namespace AISpriteAnimation
             new[] { 0.35f,   12f,   18f,  14f,   58f,  110f,   34f,   80f,   20f,  -16f,    0f,  -18f,  -30f,  -10f, 0f, -2f, 0f },   // recoil, knees give
             new[] { 0.65f,    4f,    6f,   4f,   26f,   50f,   10f,   30f,   12f,   -4f,    0f,  -10f,  -16f,  -10f, 0f, -1f, 0f },
             new[] { 1.00f,    0f,    0f,   0f,    5f,   15f,   -5f,    3f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f,  0f, 0f },
+        };
+
+        // StaggerShock (one-shot, 8 frames at 12 fps, smooth, the last frame is the held pose): she sees something she cannot bear: a jolt, the torso and head jerk
+        // back, both hands come half up in front of the chest, the far foot steps back half a step and the near knee gives; then she stays frozen like that. Unlike Hurt
+        // nothing hit her (no guarding arm thrown up) and she does not recover: the game returns to Idle when it wants. The first key is Idle's rest pose.
+        private static readonly float[][] StaggerShockKeys =
+        {
+            //          u    body  head  hair   upN   loN   upF   loF   thN   shN   ftN   thF   shF   ftF  hop rX rY
+            new[] { 0.00f,    0f,    0f,   0f,    5f,   15f,   -5f,    3f,    6f,    2f,    0f,   -6f,  -10f,  -10f, 0f,  0f, 0f },
+            new[] { 0.28f,   12f,   14f,  18f,   52f,  128f,   42f,  112f,   14f,  -10f,    0f,  -20f,  -18f,   -8f, 0f, -2f, 0f },   // the jolt: jerk back, hands fly up towards the face
+            new[] { 0.60f,    9f,    9f,   9f,   48f,  122f,   38f,  106f,   12f,   -8f,    0f,  -18f,  -16f,   -8f, 0f, -3f, 0f },   // the half step back settles
+            new[] { 1.00f,    7f,    7f,   6f,   46f,  120f,   36f,  104f,   10f,   -6f,    0f,  -16f,  -14f,   -6f, 0f, -3f, 0f },   // frozen, hands near the chin
         };
 
         // ---- crouch walk (goose-step walk): the held crouch pose, with the legs taking turns (loop) ----
