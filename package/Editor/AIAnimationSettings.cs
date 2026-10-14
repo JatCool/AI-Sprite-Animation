@@ -209,7 +209,7 @@ namespace AISpriteAnimation
         /// of the first 1.5.0 draft): they are added once when the asset is loaded, existing presets are never touched.
         /// When a new animation type is added to the package, add its name here.
         /// </summary>
-        private static readonly string[] AddedAfterFirstRelease = { "Rotate", "Jump", "Sit", "Crouch", "CrouchWalk", "WakeUp", "Ignite", "LowerHand", "Dash", "Hurt", "LeanOnColumn", "ReachColumn", "ClimbDown", "StaggerShock" };
+        private static readonly string[] AddedAfterFirstRelease = { "Rotate", "Jump", "Sit", "Crouch", "CrouchWalk", "WakeUp", "Ignite", "LowerHand", "Dash", "Hurt", "LeanOnColumn", "ReachColumn", "ClimbDown", "StaggerShock", "Spit", "RearUp", "Trot", "Recoil" };
 
         public bool AddMissingDefaultPresets()
         {
@@ -255,11 +255,31 @@ namespace AISpriteAnimation
             CreateReachColumnPreset(),
             CreateClimbDownPreset(),
             CreateStaggerShockPreset(),
+            CreateSpitPreset(),
+            CreateRearUpPreset(),
+            CreateTrotPreset(),
+            CreateRecoilPreset(),
         };
 
         /// <summary>StaggerShock: a jolt of shock: torso and head jerk back, hands half up, half a step back, then frozen (Rig, one-shot, 8 frames at 12 fps, the last frame is held).</summary>
         public static AnimationPreset CreateStaggerShockPreset() =>
             new AnimationPreset { name = "StaggerShock", frames = 8, fps = 12, loop = false, poseKind = "staggershock", prompt = "staggering back in shock" };
+
+        /// <summary>Spit: the head draws back, then snaps forward (a breath or spit attack; beasts too) (Rig, one-shot, 10 frames at 12 fps, ends at rest).</summary>
+        public static AnimationPreset CreateSpitPreset() =>
+            new AnimationPreset { name = "Spit", frames = 10, fps = 12, loop = false, poseKind = "spit", prompt = "spitting a fireball" };
+
+        /// <summary>RearUp: rearing up on the hind legs with a roar, then a stomp (a side-view quadruped: its front legs are the arms) (Rig, one-shot, 14 frames at 12 fps, ends at rest).</summary>
+        public static AnimationPreset CreateRearUpPreset() =>
+            new AnimationPreset { name = "RearUp", frames = 14, fps = 12, loop = false, poseKind = "rearup", prompt = "rearing up and roaring" };
+
+        /// <summary>Trot: the walk of a side-view quadruped (front legs rigged as the arms): diagonal pairs, the planted pair straight (Rig, loop, 8 frames at 10 fps).</summary>
+        public static AnimationPreset CreateTrotPreset() =>
+            new AnimationPreset { name = "Trot", frames = 8, fps = 10, loop = true, poseKind = "trot", prompt = "a four-legged beast walking" };
+
+        /// <summary>Recoil: a quadruped takes a hit: a jolt back, the head jerks, the front legs pull in, then it recovers (Rig, one-shot, 8 frames at 16 fps).</summary>
+        public static AnimationPreset CreateRecoilPreset() =>
+            new AnimationPreset { name = "Recoil", frames = 8, fps = 16, loop = false, poseKind = "recoil", prompt = "a beast recoiling from a hit" };
 
         /// <summary>ClimbDown: for a back-view sprite, down a ladder that faces the camera: hands and knees taking turns on the rungs (Rig, loop, 8 frames at 8 fps; the game moves the character down).</summary>
         public static AnimationPreset CreateClimbDownPreset() =>

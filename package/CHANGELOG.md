@@ -3,6 +3,16 @@
 All notable changes to this package are documented here. The project follows [Semantic Versioning](https://semver.org/):
 `MAJOR` = breaking changes (settings/workflow format, API), `MINOR` = backwards-compatible features, `PATCH` = fixes.
 
+## 1.14.0
+
+- **Spit** animation type (Rig only, one-shot, 10 @ 12, smooth keys, ends at rest): a breath or spit attack: the head draws back and up with the body, then snaps forward and down while the body lunges and the front limbs brace. Pose kind `spit`, preset `Spit`.
+- **RearUp** animation type (Rig only, one-shot, 14 @ 12, smooth keys, ends at rest): rearing up on the hind legs with a roar, then a stomp: a short crouch, the body pitches up about 30 degrees about the hip, the head throws back, the front limbs swing up and fold, held, then the front slams down past rest and settles. Pose kind `rearup`, preset `RearUp`.
+- **Trot** animation type (Rig only, loop, 8 @ 10): the walk of a side-view quadruped rigged with its front legs as the arms: the legs move in diagonal pairs half a cycle apart; the planted pair sweeps back with straight legs (its paws stay on the ground line), the lifted pair folds at the wrist and the hock and swings forward; small angles so the leg pixels cut from the belly leave no holes; the head nods. The humanoid Walk does not fit a quadruped (its knees drop the body while the front legs stay straight, so the front paws sink and float). Pose kind `trot`, preset `Trot`.
+- **Recoil** animation type (Rig only, one-shot, 8 @ 16, smooth keys): a quadruped takes a hit: a jolt back, the front pitches up a little, the head jerks back, the front legs pull in under the chest, half a step back, then it recovers. Hurt stays the humanoid version (its guarding arm becomes a thrown-out front leg on a quadruped). Pose kind `recoil`, preset `Recoil`.
+- RearUp folds the front legs under the chest (the paws hang back) and pitches about 22 degrees: swinging them forward read as a pounce.
+- Spit, RearUp, Trot and Recoil suit a **side-view quadruped** rigged with the existing parts: its front legs as the arms (shoulders at the chest), its hind legs as the legs (the hip at the rear), the torso pivoting at the hip; a joints file's `part` lines paint the regions. Both are added to existing settings assets, menu *Assets > AI > Generate Animation > Spit / RearUp*, Rig-only guard. `tools/posetests` not extended.
+- Every other animation renders exactly as before.
+
 ## 1.13.0
 
 - **StaggerShock** animation type (Rig only, one-shot, 8 @ 12, smooth keys, the last frame held): a jolt of shock at something seen: torso and head jerk back, both hands come half up in front of the chest, the far foot steps half a step back, the near knee gives, then frozen. Unlike Hurt there is no guarding arm and no recovery. Pose kind `staggershock` (`StaggerShockKeys` through `FromWorldKeys`), preset `StaggerShock` (added to existing settings assets), menu *Assets > AI > Generate Animation > StaggerShock*, Rig-only guard. `tools/posetests` not extended.

@@ -66,6 +66,10 @@ namespace AISpriteAnimation
                 case "reachcolumn": return FromWorldKeys(ReachColumnKeys, t, n, false, true);
                 case "climbdown": return ClimbDown(t, n);
                 case "staggershock": return FromWorldKeys(StaggerShockKeys, t, n, false, true);
+                case "spit": return FromWorldKeys(SpitKeys, t, n, false, true);
+                case "rearup": return FromWorldKeys(RearUpKeys, t, n, false, true);
+                case "trot": return Trot(t, n, k);
+                case "recoil": return FromWorldKeys(RecoilKeys, t, n, false, true);
                 default: return new RigPose();   // rest pose
             }
         }
@@ -97,6 +101,31 @@ namespace AISpriteAnimation
             p.SetDegrees(RigPart.Head, lean * 0.6f + 1.2f * Mathf.Sin(2f * ph));
             p.SetDegrees(RigPart.Hair, -(run ? 16f : 8f) * k * Mathf.Cos(ph - 0.8f));
             if (run) p.hop = 2.2f * k * (0.5f + 0.5f * Mathf.Cos(2f * ph));
+            return p;
+        }
+
+        // ---- trot: the walk of a side-view quadruped rigged with its front legs as the arms and its hind legs as the legs (the hip at the rear) ----
+        // The legs move in diagonal pairs (near front with far hind, far front with near hind), half a cycle apart. A pair on the ground sweeps back with
+        // straight legs, so its paws stay on the ground line (the renderer pins the lowest hind paw; a front paw on a straight leg rises less than a pixel at
+        // these angles); the lifted pair bends at the wrist and the hock and swings forward. Small angles on purpose: leg pixels cut from the belly leave holes
+        // when they swing far. The head nods twice a cycle; the torso does not move (the tail is part of it).
+        private static RigPose Trot(int t, int n, float k)
+        {
+            float ph = 2f * Mathf.PI * t / n;
+            var p = new RigPose();
+            void Pair(float phase, RigPart frontUpper, RigPart frontLower, RigPart hindUpper, RigPart hindLower, RigPart hindFoot)
+            {
+                float swing = Mathf.Sin(phase), lift = Mathf.Pow(Mathf.Max(0f, Mathf.Cos(phase)), 1.5f);   // lifted while it swings forward
+                float front = 12f * k * swing, hind = 12f * k * swing;
+                p.SetDegrees(frontUpper, front);
+                p.SetDegrees(frontLower, -40f * k * lift);                       // the wrist folds the paw back and up
+                p.SetDegrees(hindUpper, hind);
+                p.SetDegrees(hindLower, -34f * k * lift);                        // the hock folds
+                p.SetDegrees(hindFoot, -(hind - 34f * k * lift) * 0.8f);         // the paw stays roughly flat
+            }
+            Pair(ph, RigPart.ArmNearUpper, RigPart.ArmNearLower, RigPart.LegFarUpper, RigPart.LegFarLower, RigPart.FootFar);
+            Pair(ph + Mathf.PI, RigPart.ArmFarUpper, RigPart.ArmFarLower, RigPart.LegNearUpper, RigPart.LegNearLower, RigPart.FootNear);
+            p.SetDegrees(RigPart.Head, 2f * k * Mathf.Sin(2f * ph));
             return p;
         }
 
@@ -520,6 +549,45 @@ namespace AISpriteAnimation
             new[] { 0.28f,   12f,   14f,  18f,   52f,  128f,   42f,  112f,   14f,  -10f,    0f,  -20f,  -18f,   -8f, 0f, -2f, 0f },   // the jolt: jerk back, hands fly up towards the face
             new[] { 0.60f,    9f,    9f,   9f,   48f,  122f,   38f,  106f,   12f,   -8f,    0f,  -18f,  -16f,   -8f, 0f, -3f, 0f },   // the half step back settles
             new[] { 1.00f,    7f,    7f,   6f,   46f,  120f,   36f,  104f,   10f,   -6f,    0f,  -16f,  -14f,   -6f, 0f, -3f, 0f },   // frozen, hands near the chin
+        };
+
+        // Spit (one-shot, 10 frames at 12 fps, smooth): a breath or spit attack, for beasts as well as people (a side-view quadruped is rigged with its front legs
+        // as the arms, its hind legs as the legs and its torso pivoting at the hip): the head draws back and up with the body, the front legs ease back; then the head
+        // snaps forward and down (the moment the projectile leaves), the body lunges in, the front legs brace forward, the hind legs push back; it settles to rest.
+        private static readonly float[][] SpitKeys =
+        {
+            //          u    body  head  hair   upN   loN   upF   loF   thN   shN   ftN   thF   shF   ftF  hop  rX    rY
+            new[] { 0.00f,    0f,    0f,   0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f, 0f,  0f,   0f },
+            new[] { 0.35f,    5f,   20f,  20f,   -6f,   -6f,   -4f,   -4f,    3f,    3f,    0f,   -3f,   -3f,    0f, 0f, -0.6f, 0f },   // draw back
+            new[] { 0.55f,   -6f,  -18f, -18f,   10f,    6f,    8f,    4f,   -6f,   -6f,    0f,   -8f,   -8f,    0f, 0f,  1.2f, 0f },   // the snap: spit
+            new[] { 0.75f,   -4f,  -12f, -12f,    6f,    4f,    5f,    3f,   -4f,   -4f,    0f,   -5f,   -5f,    0f, 0f,  0.8f, 0f },   // follow-through
+            new[] { 1.00f,    0f,    0f,   0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f, 0f,  0f,   0f },
+        };
+
+        // RearUp (one-shot, 14 frames at 12 fps, smooth): rearing up on the hind legs with a roar, then slamming the front down (a stomp). For a side-view quadruped
+        // (front legs = arms, torso pivoting at the hip): a short crouch, the body pitches up about 22 degrees about the hip, the head throws back further, the front
+        // legs fold under the chest (the paws hang back, version 2: version 1 swung them forward and read as a pounce), held for the roar; then the front comes down
+        // hard past rest (the stomp, a little forward) and settles. The hind legs stay planted.
+        private static readonly float[][] RearUpKeys =
+        {
+            //          u    body  head  hair   upN   loN   upF   loF   thN   shN   ftN   thF   shF   ftF  hop  rX    rY
+            new[] { 0.00f,    0f,    0f,   0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f, 0f,  0f,   0f },
+            new[] { 0.20f,   -4f,   -6f,  -6f,    6f,   -4f,    6f,   -4f,    6f,  -10f,    4f,    4f,  -10f,    6f, 0f,  0f,   0f },   // crouch
+            new[] { 0.45f,   22f,   32f,  32f,   34f,  -38f,   28f,  -42f,    4f,   -4f,    0f,    0f,   -4f,    0f, 0f,  0f,   0f },   // rear up: the front legs fold
+            new[] { 0.65f,   24f,   36f,  36f,   38f,  -34f,   32f,  -38f,    4f,   -4f,    0f,    0f,   -4f,    0f, 0f,  0f,   0f },   // the roar, held
+            new[] { 0.82f,   -6f,  -10f, -10f,   -4f,   -2f,   -2f,    0f,   -4f,   -6f,    0f,   -6f,   -6f,    0f, 0f,  1.5f, 0f },   // the stomp
+            new[] { 1.00f,    0f,    0f,   0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f, 0f,  0f,   0f },
+        };
+
+        // Recoil (one-shot, 8 frames at 16 fps, smooth): a hit taken by a side-view quadruped (front legs = arms): a jolt back, the front pitches up a little, the head
+        // jerks back, the front legs pull in under the chest, half a step back; then it recovers to rest. Hurt is the humanoid version (a guarding arm).
+        private static readonly float[][] RecoilKeys =
+        {
+            //          u    body  head  hair   upN   loN   upF   loF   thN   shN   ftN   thF   shF   ftF  hop  rX    rY
+            new[] { 0.00f,    0f,    0f,   0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f, 0f,  0f,   0f },
+            new[] { 0.25f,    8f,   20f,  20f,  -10f,  -18f,  -12f,  -20f,    6f,   -6f,    0f,    4f,   -6f,    0f, 0f, -1.5f, 0f },   // the jolt
+            new[] { 0.50f,    6f,   14f,  14f,   -8f,  -14f,   -9f,  -15f,    5f,   -5f,    0f,    3f,   -5f,    0f, 0f, -2f,   0f },   // half a step back
+            new[] { 1.00f,    0f,    0f,   0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f,    0f, 0f, -2f,   0f },   // recovered, where it ended up
         };
 
         // ---- crouch walk (goose-step walk): the held crouch pose, with the legs taking turns (loop) ----
