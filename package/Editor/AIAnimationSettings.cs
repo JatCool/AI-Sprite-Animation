@@ -209,7 +209,7 @@ namespace AISpriteAnimation
         /// of the first 1.5.0 draft): they are added once when the asset is loaded, existing presets are never touched.
         /// When a new animation type is added to the package, add its name here.
         /// </summary>
-        private static readonly string[] AddedAfterFirstRelease = { "Rotate", "Jump", "Sit", "Crouch", "CrouchWalk", "WakeUp", "Ignite", "LowerHand", "Dash", "Hurt", "LeanOnColumn", "ReachColumn", "ClimbDown", "StaggerShock", "Spit", "RearUp", "Trot", "Recoil" };
+        private static readonly string[] AddedAfterFirstRelease = { "Rotate", "Jump", "Sit", "Crouch", "CrouchWalk", "WakeUp", "Ignite", "LowerHand", "Dash", "Hurt", "LeanOnColumn", "ReachColumn", "ClimbDown", "StaggerShock", "Spit", "RearUp", "Trot", "Recoil", "Fall" };
 
         public bool AddMissingDefaultPresets()
         {
@@ -259,7 +259,12 @@ namespace AISpriteAnimation
             CreateRearUpPreset(),
             CreateTrotPreset(),
             CreateRecoilPreset(),
+            CreateFallPreset(),
         };
+
+        /// <summary>Fall: the falling pose of the jump held while airborne and going down (legs reaching, arms out, hair streaming up, a slow flutter) (Rig, loop, 6 frames at 10 fps).</summary>
+        public static AnimationPreset CreateFallPreset() =>
+            new AnimationPreset { name = "Fall", frames = 6, fps = 10, loop = true, poseKind = "fall", prompt = "falling through the air" };
 
         /// <summary>StaggerShock: a jolt of shock: torso and head jerk back, hands half up, half a step back, then frozen (Rig, one-shot, 8 frames at 12 fps, the last frame is held).</summary>
         public static AnimationPreset CreateStaggerShockPreset() =>

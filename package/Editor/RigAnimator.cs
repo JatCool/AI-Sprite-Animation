@@ -54,6 +54,7 @@ namespace AISpriteAnimation
                 case "idle": return Idle(t, n, k);
                 case "attack": return Attack(t, n, k);
                 case "jump": return Jump(t, n, k);
+                case "fall": return Fall(t, n, k);
                 case "sit": return Sit(t, n, k);
                 case "crouch": return Crouch(t, n, k);
                 case "crouchwalk": return CrouchWalk(t, n, k);
@@ -226,6 +227,32 @@ namespace AISpriteAnimation
             p.SetDegrees(RigPart.LegNearUpper, V(9) * k); p.SetDegrees(RigPart.LegNearLower, V(10) * k); p.SetDegrees(RigPart.FootNear, V(11) * k);
             p.SetDegrees(RigPart.LegFarUpper, V(12) * k); p.SetDegrees(RigPart.LegFarLower, V(13) * k); p.SetDegrees(RigPart.FootFar, V(14) * k);
             p.hop = V(15) * k;
+            return p;
+        }
+
+        // ---- fall (loop): held while the character drops: the arms thrown up for balance, the legs apart,
+        // the hair streams upward; a slow flutter (arms, hair, legs out of phase) keeps it alive. No hop: the game moves the body, the feet stay on the pivot's row.
+        private static RigPose Fall(int t, int n, float k)
+        {
+            float ph = 2f * Mathf.PI * t / Mathf.Max(1, n);
+            float s = Mathf.Sin(ph), c = Mathf.Sin(ph + 1.2f);
+            var p = new RigPose();
+            p.SetDegrees(RigPart.Body, (-3f + 1.5f * s) * k);
+            p.SetDegrees(RigPart.Head, (2f - 1.5f * s) * k);   // keeps the face nearly level while the torso sways
+            p.SetDegrees(RigPart.Hair, (18f + 6f * c) * k);
+            // the arms thrown up above the shoulders for balance, flailing a little out of phase
+            p.SetDegrees(RigPart.ArmNearUpper, (138f + 10f * s) * k);
+            p.SetDegrees(RigPart.ArmNearLower, (22f + 8f * c) * k);
+            p.SetDegrees(RigPart.Weapon, (-30f - 6f * s) * k);
+            p.SetDegrees(RigPart.ArmFarUpper, (118f + 10f * c) * k);
+            p.SetDegrees(RigPart.ArmFarLower, (18f + 6f * s) * k);
+            // the legs apart: the near one forward with the knee bent, the far one trailing back
+            p.SetDegrees(RigPart.LegNearUpper, (30f + 5f * s) * k);
+            p.SetDegrees(RigPart.LegNearLower, (-42f - 5f * s) * k);
+            p.SetDegrees(RigPart.FootNear, 16f * k);
+            p.SetDegrees(RigPart.LegFarUpper, (-12f - 5f * s) * k);
+            p.SetDegrees(RigPart.LegFarLower, (-26f + 5f * s) * k);
+            p.SetDegrees(RigPart.FootFar, 12f * k);
             return p;
         }
 

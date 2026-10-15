@@ -3,6 +3,10 @@
 All notable changes to this package are documented here. The project follows [Semantic Versioning](https://semver.org/):
 `MAJOR` = breaking changes (settings/workflow format, API), `MINOR` = backwards-compatible features, `PATCH` = fixes.
 
+## 1.15.0
+
+- **Fall** animation type (Rig only, loop, 6 @ 10): the jump's falling pose held while the character is airborne and going down (arms thrown up for balance, legs apart, hair streaming up) with a slow flutter. Pose kind `fall`, preset `Fall`, menu Assets > AI > Generate Animation > Fall.
+
 ## 1.14.0
 
 - **Spit** animation type (Rig only, one-shot, 10 @ 12, smooth keys, ends at rest): a breath or spit attack: the head draws back and up with the body, then snaps forward and down while the body lunges and the front limbs brace. Pose kind `spit`, preset `Spit`.
